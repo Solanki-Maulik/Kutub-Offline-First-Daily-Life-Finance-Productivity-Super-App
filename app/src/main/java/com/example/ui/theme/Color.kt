@@ -1,0 +1,28 @@
+package com.example.ui.theme
+
+import androidx.compose.ui.graphics.Color
+
+val primaryLight = Color(0xFF0061A4)
+val onPrimaryLight = Color(0xFFFFFFFF)
+val primaryContainerLight = Color(0xFFD3E4FF)
+val onPrimaryContainerLight = Color(0xFF001C3B)
+val secondaryLight = Color(0xFF6750A4)
+val onSecondaryLight = Color(0xFFFFFFFF)
+val secondaryContainerLight = Color(0xFFEADDFF)
+val onSecondaryContainerLight = Color(0xFF21005D)
+val tertiaryLight = Color(0xFF625B71)
+val onTertiaryLight = Color(0xFFFFFFFF)
+val tertiaryContainerLight = Color(0xFFE8DEF8)
+val onTertiaryContainerLight = Color(0xFF1D192B)
+val errorLight = Color(0xFFBA1A1A)
+val onErrorLight = Color(0xFFFFFFFF)
+val errorContainerLight = Color(0xFFFFDAD6)
+val onErrorContainerLight = Color(0xFF410002)
+val backgroundLight = Color(0xFFFDFBFF)
+val onBackgroundLight = Color(0xFF1A1C1E)
+val surfaceLight = Color(0xFFFFFFFF)
+val onSurfaceLight = Color(0xFF1A1C1E)
+val surfaceVariantLight = Color(0xFFF3F4F9)
+val onSurfaceVariantLight = Color(0xFF44474E)
+val outlineLight = Color(0xFFBAC7DB)
+val outlineVariantLight = Color(0xFFE1E2E9)

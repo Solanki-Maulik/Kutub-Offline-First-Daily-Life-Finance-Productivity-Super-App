@@ -1,0 +1,2 @@
+sed -i 's/val accounts: StateFlow<List<Account>> = repository.allAccounts/val accounts: StateFlow<List<Account>> = repository.allAccounts.map { if (it.isEmpty()) { val defaults = listOf(Account("Cash", 0.0), Account("Bank", 0.0)); defaults.forEach { acc -> addAccount(acc.name, acc.balance) }; defaults } else it }/g' app/src/main/java/com/example/viewmodel/FinanceViewModel.kt
+sed -i '1s/^/import kotlinx.coroutines.flow.map\n/' app/src/main/java/com/example/viewmodel/FinanceViewModel.kt

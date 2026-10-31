@@ -1,0 +1,6 @@
+{
+  "name": "RupeeStory",
+  "description": "Understand your money. One rupee at a time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

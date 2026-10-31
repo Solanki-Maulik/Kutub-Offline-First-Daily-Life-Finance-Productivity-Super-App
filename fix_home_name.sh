@@ -1,0 +1,3 @@
+sed -i 's/val context = LocalContext.current/val context = LocalContext.current\n    val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)\n    val userName = prefs.getString("user_name", "Maulik") ?: "Maulik"/g' app/src/main/java/com/example/ui/screens/HomeScreen.kt
+sed -i 's/Text("Maulik", style = MaterialTheme.typography.titleLarge/Text(userName, style = MaterialTheme.typography.titleLarge/g' app/src/main/java/com/example/ui/screens/HomeScreen.kt
+sed -i 's/Text("M", fontWeight = FontWeight.Bold/val initial = if (userName.isNotBlank()) userName.first().uppercase() else "U"\n                        Text(initial, fontWeight = FontWeight.Bold/g' app/src/main/java/com/example/ui/screens/HomeScreen.kt

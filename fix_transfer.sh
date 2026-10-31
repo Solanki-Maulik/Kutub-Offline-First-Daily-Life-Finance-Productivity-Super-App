@@ -1,0 +1,1 @@
+sed -i 's/viewModel.addTransfer(parsedAmount, selectedAccount, toAccount, note)/viewModel.addTransfer(parsedAmount, selectedAccount, toAccount, System.currentTimeMillis())/g' app/src/main/java/com/example/ui/screens/AddExpenseScreen.kt

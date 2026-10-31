@@ -1,0 +1,2 @@
+sed -i 's/modifier = Modifier.clickable { NotificationHelper.scheduleDailyReminder(context) },/ /g' app/src/main/java/com/example/ui/screens/SettingsScreen.kt
+sed -i 's/trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) }/trailingContent = { Switch(checked = prefs.getBoolean("daily_reminder", false), onCheckedChange = { checked -> prefs.edit().putBoolean("daily_reminder", checked).apply(); if (checked) NotificationHelper.scheduleDailyReminder(context) }) }/g' app/src/main/java/com/example/ui/screens/SettingsScreen.kt
