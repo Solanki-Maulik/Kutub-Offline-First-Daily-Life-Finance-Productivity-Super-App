@@ -23,29 +23,70 @@ class NotificationReceiver : BroadcastReceiver() {
     }
 }
 
+class TaskReminderReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val title = intent.getStringExtra("title") ?: "Task Reminder"
+        val message = intent.getStringExtra("message") ?: "You have a task scheduled now."
+        val notifId = intent.getIntExtra("id", 2001)
+        NotificationHelper.sendTaskNotification(context, title, message, notifId)
+    }
+}
+
 object NotificationHelper {
-    private const val CHANNEL_ID = "rupee_story_reminders"
-    private const val NOTIFICATION_ID = 1001
+    private const val CHANNEL_DAILY_ID = "rupee_story_reminders"
+    private const val CHANNEL_TASKS_ID = "moneymate_tasks_schedule"
+    private const val DAILY_NOTIFICATION_ID = 1001
 
     fun createNotificationChannel(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val name = "Daily Reminders"
-            val descriptionText = "Reminders to log your daily expenses"
-            val importance = NotificationManager.IMPORTANCE_DEFAULT
-            val channel = NotificationChannel(CHANNEL_ID, name, importance).apply {
-                description = descriptionText
-            }
-            val notificationManager: NotificationManager =
+            val notificationManager =
                 context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-            notificationManager.createNotificationChannel(channel)
+
+            // Channel 1: Daily Expense Reminders
+            val dailyChannel = NotificationChannel(
+                CHANNEL_DAILY_ID,
+                "Daily Reminders",
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply {
+                description = "Reminders to log your daily expenses"
+            }
+            notificationManager.createNotificationChannel(dailyChannel)
+
+            // Channel 2: Tasks & Schedule Reminders
+            val taskChannel = NotificationChannel(
+                CHANNEL_TASKS_ID,
+                "Tasks & Schedule Reminders",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Reminders for scheduled tasks and calendar events"
+                enableVibration(true)
+            }
+            notificationManager.createNotificationChannel(taskChannel)
+        }
+    }
+
+    fun hasNotificationPermission(context: Context): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        } else {
+            NotificationManagerCompat.from(context).areNotificationsEnabled()
         }
     }
 
     fun sendDailyReminder(context: Context) {
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+        if (!hasNotificationPermission(context)) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
             return
         }
-        
+
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
@@ -53,7 +94,7 @@ object NotificationHelper {
             context, 0, intent, PendingIntent.FLAG_IMMUTABLE
         )
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_DAILY_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Time to log your expenses!")
             .setContentText("Keep your budget on track by logging your recent transactions.")
@@ -61,8 +102,70 @@ object NotificationHelper {
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
 
-        with(NotificationManagerCompat.from(context)) {
-            notify(NOTIFICATION_ID, builder.build())
+        try {
+            NotificationManagerCompat.from(context).notify(DAILY_NOTIFICATION_ID, builder.build())
+        } catch (_: SecurityException) {
+            // Permission revoked at runtime
+        }
+    }
+
+    fun sendTaskNotification(context: Context, title: String, message: String, id: Int = 2001) {
+        if (!hasNotificationPermission(context)) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ActivityCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+
+        val intent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val pendingIntent: PendingIntent = PendingIntent.getActivity(
+            context, id, intent, PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val builder = NotificationCompat.Builder(context, CHANNEL_TASKS_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+
+        try {
+            NotificationManagerCompat.from(context).notify(id, builder.build())
+        } catch (_: SecurityException) {
+            // Permission revoked at runtime
+        }
+    }
+
+    fun scheduleTaskReminder(context: Context, id: Long, title: String, message: String, triggerAtMillis: Long) {
+        if (triggerAtMillis <= System.currentTimeMillis()) return
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return
+        val intent = Intent(context, TaskReminderReceiver::class.java).apply {
+            putExtra("id", id.toInt())
+            putExtra("title", title)
+            putExtra("message", message)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            id.toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            }
+        } catch (e: SecurityException) {
+            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
         }
     }
 
@@ -79,7 +182,6 @@ object NotificationHelper {
             set(Calendar.MINUTE, 0)
         }
 
-        // If time is past, schedule for tomorrow
         if (calendar.timeInMillis <= System.currentTimeMillis()) {
             calendar.add(Calendar.DAY_OF_YEAR, 1)
         }

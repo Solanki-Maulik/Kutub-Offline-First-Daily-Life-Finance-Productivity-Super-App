@@ -16,11 +16,17 @@ interface TransactionDao {
     suspend fun getTransactionById(id: Int): Transaction?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(transaction: Transaction)
+    suspend fun insert(transaction: Transaction): Long
 
     @Update
     suspend fun update(transaction: Transaction)
 
     @Query("DELETE FROM transactions WHERE id = :id")
     suspend fun deleteById(id: Int)
+
+    @Query("UPDATE transactions SET account = :newAccount WHERE LOWER(account) = LOWER(:oldAccount)")
+    suspend fun reassignAccountForTransactions(oldAccount: String, newAccount: String)
+
+    @Query("DELETE FROM transactions WHERE LOWER(account) = LOWER(:accountName)")
+    suspend fun deleteTransactionsForAccount(accountName: String)
 }

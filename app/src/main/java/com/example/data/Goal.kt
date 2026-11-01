@@ -11,5 +11,7 @@ data class Goal(
     val name: String,
     val targetAmount: Double,
     val savedAmount: Double = 0.0,
-    val targetDateMillis: Long = 0L
+    val targetDateMillis: Long = 0L,
+    val category: String = "Savings",
+    val note: String = ""
 )

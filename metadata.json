@@ -1,6 +1,6 @@
 {
-  "name": "RupeeStory",
-  "description": "Understand your money. One rupee at a time.",
+  "name": "Kutub",
+  "description": "Kutub (કુતુબ) — Personal finance, tasks, habits, notes, vault, and AI life hub.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

@@ -1,0 +1,105 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net: Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // 2. Hardened Primitives
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // 3. Entity Validation Blueprint
+    function isValidCloudBackupSnapshot(data) {
+      return data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 128 &&
+             data.userId == request.auth.uid &&
+             data.deviceName is string && data.deviceName.size() >= 1 && data.deviceName.size() <= 100 &&
+             data.schemaVersion is int && data.schemaVersion >= 1 && data.schemaVersion <= 100 &&
+             data.summaryText is string && data.summaryText.size() >= 1 && data.summaryText.size() <= 500 &&
+             data.transactionCount is int && data.transactionCount >= 0 && data.transactionCount <= 100000 &&
+             data.totalItemsCount is int && data.totalItemsCount >= 0 && data.totalItemsCount <= 500000 &&
+             data.backupPayload is string && data.backupPayload.size() >= 2 && data.backupPayload.size() <= 900000 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    // 4. Collection Rules: /users/{userId}/cloud_backups/{backupId}
+    match /users/{userId}/cloud_backups/{backupId} {
+      allow get: if isSignedIn() &&
+                    isValidId(userId) &&
+                    isValidId(backupId) &&
+                    request.auth.uid == userId;
+
+      allow list: if isSignedIn() &&
+                     isValidId(userId) &&
+                     request.auth.uid == userId &&
+                     existing().userId == request.auth.uid;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(backupId) &&
+                       request.auth.uid == userId &&
+                       incoming().keys().hasAll([
+                         'userId',
+                         'deviceName',
+                         'schemaVersion',
+                         'summaryText',
+                         'transactionCount',
+                         'totalItemsCount',
+                         'backupPayload',
+                         'createdAt',
+                         'updatedAt'
+                       ]) &&
+                       incoming().keys().hasOnly([
+                         'userId',
+                         'deviceName',
+                         'schemaVersion',
+                         'summaryText',
+                         'transactionCount',
+                         'totalItemsCount',
+                         'backupPayload',
+                         'createdAt',
+                         'updatedAt'
+                       ]) &&
+                       isValidCloudBackupSnapshot(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(backupId) &&
+                       request.auth.uid == userId &&
+                       isValidCloudBackupSnapshot(incoming()) &&
+                       incoming().userId == existing().userId &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly([
+                         'deviceName',
+                         'schemaVersion',
+                         'summaryText',
+                         'transactionCount',
+                         'totalItemsCount',
+                         'backupPayload',
+                         'updatedAt'
+                       ]);
+
+      allow delete: if isSignedIn() &&
+                       isValidId(userId) &&
+                       isValidId(backupId) &&
+                       request.auth.uid == userId &&
+                       existing().userId == request.auth.uid;
+    }
+  }
+}

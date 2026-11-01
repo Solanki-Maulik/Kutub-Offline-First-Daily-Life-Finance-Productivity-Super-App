@@ -11,7 +11,11 @@ data class Transaction(
     val amount: Double,
     val isIncome: Boolean,
     val category: String,
-    val account: String = "Cash",
+    val subcategory: String = "",
+    val account: String = "Cash in Hand",
+    val paymentMethod: String = "UPI",
     val note: String = "",
+    val tags: String = "",
+    val photoUri: String? = null,
     val timestamp: Long
 )

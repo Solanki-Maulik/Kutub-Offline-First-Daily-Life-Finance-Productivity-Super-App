@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "CloudBackupSnapshot": {
+      "title": "CloudBackupSnapshot",
+      "description": "User-scoped encrypted/serialized cloud sync snapshot of all RupeeStory modules and preferences.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The authenticated Firebase UID of the owner."
+        },
+        "deviceName": {
+          "type": "string",
+          "description": "Name or model of the Android device that uploaded the backup."
+        },
+        "schemaVersion": {
+          "type": "integer",
+          "description": "Backup schema version number."
+        },
+        "summaryText": {
+          "type": "string",
+          "description": "Human-readable summary of counts (transactions, accounts, notes, tasks, habits, etc.)."
+        },
+        "transactionCount": {
+          "type": "integer",
+          "description": "Number of transactions in this snapshot."
+        },
+        "totalItemsCount": {
+          "type": "integer",
+          "description": "Total number of records across all modules in this snapshot."
+        },
+        "backupPayload": {
+          "type": "string",
+          "description": "Complete validated JSON backup payload."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the cloud backup document was first created (FieldValue.serverTimestamp())."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp when the cloud backup document was last updated (FieldValue.serverTimestamp())."
+        }
+      },
+      "required": [
+        "userId",
+        "deviceName",
+        "schemaVersion",
+        "summaryText",
+        "transactionCount",
+        "totalItemsCount",
+        "backupPayload",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/cloud_backups/{backupId}": {
+      "schema": {
+        "$ref": "#/entities/CloudBackupSnapshot"
+      },
+      "description": "Per-user cloud sync snapshots isolated strictly to the authenticated owner."
+    }
+  }
+}
