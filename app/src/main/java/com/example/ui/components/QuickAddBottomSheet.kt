@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -93,20 +94,19 @@ fun QuickAddBottomSheet(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Icon(
-                        Icons.Default.Bolt,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Text(
-                        "Quick Add",
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.testTag("quick_add_back_btn")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    AutoSizeSingleLineText(
+                        text = if (isIncome) "Add Income" else "Add Expense",
                         style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
@@ -121,7 +121,7 @@ fun QuickAddBottomSheet(
                 ) {
                     Icon(Icons.Default.Check, contentDescription = "Save", modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Save", fontWeight = FontWeight.Bold)
+                    Text("Save", fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
 
@@ -264,36 +264,39 @@ fun QuickAddBottomSheet(
                 shape = RoundedCornerShape(14.dp)
             )
 
-            // Save Action (Tap 3)
-            Button(
-                onClick = {
-                    val parsed = amount.toDoubleOrNull()
-                    if (parsed == null || parsed <= 0) {
-                        errorMessage = "Please enter a valid amount greater than 0"
-                        return@Button
-                    }
-                    val paymentMethod = if (selectedAccount.contains("Cash", ignoreCase = true)) "Cash" else "UPI"
-                    viewModel.addTransaction(
-                        amount = parsed,
-                        isIncome = isIncome,
-                        category = selectedCategory,
-                        account = selectedAccount,
-                        note = note,
-                        timestamp = System.currentTimeMillis(),
-                        paymentMethod = paymentMethod
-                    )
-                    onSuccess("Added ${if (isIncome) "+" else "-"}${FormatUtils.formatInr(parsed)} ($selectedCategory)")
-                    onDismiss()
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp)
-                    .testTag("quick_add_save_button"),
-                shape = RoundedCornerShape(16.dp)
+            // Bottom Back + Save Row
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.FlashOn, contentDescription = null)
-                Spacer(Modifier.width(8.dp))
-                Text("Quick Save (1-Tap)", fontWeight = FontWeight.Bold)
+                OutlinedButton(
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .weight(0.38f)
+                        .height(50.dp),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Back", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                }
+                Button(
+                    onClick = performQuickSave,
+                    modifier = Modifier
+                        .weight(0.62f)
+                        .height(50.dp)
+                        .testTag("quick_add_save_button"),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (isIncome) "Save Income" else "Save Expense",
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1
+                    )
+                }
             }
         }
     }

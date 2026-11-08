@@ -945,6 +945,9 @@ fun MoneyHubScreen(
                     if ("reports" in enabledModules) {
                         MoneySubPill("Reports", Icons.Default.Assessment) { navController.navigate("analytics") }
                     }
+                    MoneySubPill("Fuel Mileage", Icons.Default.LocalGasStation) { navController.navigate("daily_toolkit?tab=1") }
+                    MoneySubPill("Safe Spend & Subs", Icons.Default.Shield) { navController.navigate("daily_toolkit?tab=2") }
+                    MoneySubPill("EMI & WhatsApp", Icons.Default.Calculate) { navController.navigate("daily_toolkit?tab=4") }
                 }
             }
 

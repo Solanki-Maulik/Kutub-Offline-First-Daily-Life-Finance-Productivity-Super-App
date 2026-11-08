@@ -1,20 +1,20 @@
 package com.example.ui.components
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.TaskAlt
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -26,14 +26,12 @@ fun QuickNoteDialog(
     var content by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
 
-    fun submitNote() {
-        val resolvedTitle = title.trim().ifBlank {
-            content.trim().lineSequence().firstOrNull()?.take(36) ?: ""
-        }
-        if (resolvedTitle.isBlank()) {
+    val performSave = {
+        if (title.isBlank() && content.isBlank()) {
             error = true
         } else {
-            onSave(resolvedTitle, content.trim())
+            val finalTitle = if (title.isBlank()) content.take(30) else title
+            onSave(finalTitle.trim(), content.trim())
         }
     }
 
@@ -46,16 +44,37 @@ fun QuickNoteDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("Add Note", fontWeight = FontWeight.Bold)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("quick_note_back_btn")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    AutoSizeSingleLineText(
+                        text = "Quick Note",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 Button(
-                    onClick = { submitNote() },
-                    shape = RoundedCornerShape(10.dp),
+                    onClick = performSave,
                     contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
-                    modifier = Modifier.testTag("quick_note_top_save_check")
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .testTag("quick_note_top_check_btn")
                 ) {
                     Icon(Icons.Default.Check, contentDescription = "Save Note", modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Save", fontWeight = FontWeight.Bold)
+                    Text("Save", fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
         },
@@ -63,52 +82,52 @@ fun QuickNoteDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    "Jot down financial reminders, PIN hints, promises, or ideas.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
                 OutlinedTextField(
                     value = title,
                     onValueChange = {
                         title = it
-                        if (it.isNotBlank()) error = false
+                        error = false
                     },
-                    label = { Text("Note Title *") },
-                    placeholder = { Text("e.g. Next month budget rule") },
-                    leadingIcon = { Icon(Icons.Default.EditNote, contentDescription = null) },
+                    label = { Text("Note Title") },
+                    placeholder = { Text("e.g. Monthly grocery list") },
                     singleLine = true,
                     isError = error,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("quick_note_title_input")
+                        .testTag("quick_note_title_input"),
+                    shape = RoundedCornerShape(14.dp)
                 )
 
                 OutlinedTextField(
                     value = content,
                     onValueChange = {
                         content = it
-                        if (it.isNotBlank()) error = false
+                        error = false
                     },
-                    label = { Text("Content (Optional)") },
-                    placeholder = { Text("e.g. Save ₹5000 before Diwali shopping...") },
-                    maxLines = 4,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    label = { Text("Write your note...") },
+                    minLines = 3,
+                    maxLines = 6,
+                    isError = error,
+                    supportingText = {
+                        if (error) {
+                            Text("Please enter a title or note content", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("quick_note_content_input")
+                        .testTag("quick_note_content_input"),
+                    shape = RoundedCornerShape(14.dp)
                 )
             }
         },
         confirmButton = {
             Button(
-                onClick = { submitNote() },
-                modifier = Modifier.testTag("save_quick_note_button")
+                onClick = performSave,
+                modifier = Modifier.testTag("save_quick_note_button"),
+                shape = RoundedCornerShape(12.dp)
             ) {
                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
@@ -116,94 +135,142 @@ fun QuickNoteDialog(
             }
         },
         dismissButton = {
-            TextButton(
+            OutlinedButton(
                 onClick = onDismiss,
-                modifier = Modifier.testTag("cancel_quick_note_button")
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Cancel")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Back")
             }
         }
     )
 }
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun QuickTaskDialog(
     onDismiss: () -> Unit,
-    onSave: (title: String, timeLabel: String) -> Unit
+    onSave: (title: String, priority: String) -> Unit
 ) {
     var title by remember { mutableStateOf("") }
-    var timeLabel by remember { mutableStateOf("Today") }
+    var priority by remember { mutableStateOf("MEDIUM") }
     var error by remember { mutableStateOf(false) }
+
+    val performTaskSave = {
+        if (title.isBlank()) {
+            error = true
+        } else {
+            onSave(title.trim(), priority)
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
         title = {
-            Text("Add Daily Task", fontWeight = FontWeight.Bold)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("quick_task_back_btn")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    AutoSizeSingleLineText(
+                        text = "Quick Task",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = performTaskSave,
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .height(36.dp)
+                        .testTag("quick_task_top_check_btn")
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = "Save Task", modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Save", fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            }
         },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    "Add an item to today's money and life checklist.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
                 OutlinedTextField(
                     value = title,
                     onValueChange = {
                         title = it
-                        if (it.isNotBlank()) error = false
+                        error = false
                     },
-                    label = { Text("Task Description *") },
-                    placeholder = { Text("e.g. Pay maintenance fee") },
-                    leadingIcon = { Icon(Icons.Default.Assignment, contentDescription = null) },
+                    label = { Text("Task Title *") },
+                    placeholder = { Text("e.g. Pay electricity bill, Call CA") },
                     singleLine = true,
                     isError = error,
-                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    supportingText = {
+                        if (error) {
+                            Text("Please enter a task title", color = MaterialTheme.colorScheme.error)
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("quick_task_title_input")
+                        .testTag("quick_task_title_input"),
+                    shape = RoundedCornerShape(14.dp)
                 )
 
-                OutlinedTextField(
-                    value = timeLabel,
-                    onValueChange = { timeLabel = it },
-                    label = { Text("Time / Target (Optional)") },
-                    placeholder = { Text("e.g. 5:00 PM, Today, Tomorrow") },
-                    leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("quick_task_time_input")
-                )
+                Text("Priority", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf("LOW", "MEDIUM", "HIGH", "URGENT").forEach { p ->
+                        FilterChip(
+                            selected = priority == p,
+                            onClick = { priority = p },
+                            label = { Text(p) }
+                        )
+                    }
+                }
             }
         },
         confirmButton = {
             Button(
-                onClick = {
-                    if (title.isBlank()) {
-                        error = true
-                    } else {
-                        onSave(title.trim(), timeLabel.trim())
-                    }
-                },
-                modifier = Modifier.testTag("save_quick_task_button")
+                onClick = performTaskSave,
+                modifier = Modifier.testTag("save_quick_task_button"),
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Add Task")
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Add Task", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(
+            OutlinedButton(
                 onClick = onDismiss,
-                modifier = Modifier.testTag("cancel_quick_task_button")
+                shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Cancel")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Back")
             }
         }
     )

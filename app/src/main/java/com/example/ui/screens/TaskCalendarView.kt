@@ -38,6 +38,8 @@ fun TaskCalendarView(
     onDeleteEvent: (ScheduleEvent) -> Unit,
     onAddTaskForDate: (Long) -> Unit,
     onAddEventForDate: (Long) -> Unit,
+    onEditTask: (TaskItem) -> Unit = {},
+    onEditEvent: (ScheduleEvent) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var calendarMonth by remember {
@@ -271,7 +273,8 @@ fun TaskCalendarView(
             items(selectedDayEvents, key = { "evt_${it.id}" }) { event ->
                 ScheduleEventCard(
                     event = event,
-                    onDelete = { onDeleteEvent(event) }
+                    onDelete = { onDeleteEvent(event) },
+                    onEdit = { onEditEvent(event) }
                 )
             }
         }
@@ -291,7 +294,8 @@ fun TaskCalendarView(
                     task = task,
                     onStatusToggle = { nextStatus -> onTaskStatusToggle(task, nextStatus) },
                     onSubtaskToggle = { subtaskId -> onSubtaskToggle(task, subtaskId) },
-                    onDelete = { onDeleteTask(task) }
+                    onDelete = { onDeleteTask(task) },
+                    onEdit = { onEditTask(task) }
                 )
             }
         }

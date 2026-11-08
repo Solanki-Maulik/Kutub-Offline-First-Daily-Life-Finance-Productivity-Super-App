@@ -25,8 +25,8 @@ import java.util.Locale
 import java.util.UUID
 
 private const val TAG = "GeminiAiService"
-private const val MODEL_NAME = "gemini-3.8-flash"
-private const val AI_TIMEOUT_MS = 60_000L
+private const val MODEL_NAME = "gemini-3.5-flash-lite"
+private const val AI_TIMEOUT_MS = 2_500L
 
 const val AI_MISTAKES_DISCLAIMER =
     "AI can make mistakes. Please verify amounts, accounts, categories, and dates before saving or acting on financial insights."
@@ -51,7 +51,7 @@ sealed interface AiUiState<out T> {
 
 data class SmartParsedEntry(
     val id: String = UUID.randomUUID().toString(),
-    val entryKind: String, // "EXPENSE", "INCOME", "TRANSFER", "UDHAAR_GOT", "UDHAAR_GAVE"
+    val entryKind: String, // "EXPENSE", "INCOME", "TRANSFER", "UDHAAR_GOT", "UDHAAR_GAVE", "TASK", "SCHEDULE", "HABIT", "NOTE"
     val amount: Double,
     val account: String,
     val toAccount: String = "",
@@ -62,7 +62,13 @@ data class SmartParsedEntry(
     val note: String,
     val selected: Boolean = true,
     val validationWarning: String? = null
-)
+) {
+    val requiresAmount: Boolean
+        get() = entryKind.uppercase(Locale.ROOT) in setOf("EXPENSE", "INCOME", "TRANSFER", "UDHAAR_GOT", "UDHAAR_GAVE")
+
+    val isReadyToSave: Boolean
+        get() = selected && (!requiresAmount || amount > 0.0) && note.isNotBlank()
+}
 
 data class SmartEntryResult(
     val entries: List<SmartParsedEntry>,
@@ -355,20 +361,30 @@ object AiSchemasAndValidators {
         properties = mapOf(
             "summaryNote" to Schema.string(description = "Brief summary of the parsed entries"),
             "entries" to Schema.array(
-                description = "List of parsed transactions or Udhaar entries",
+                description = "List of parsed transactions, Udhaar entries, tasks, schedule events, habits, or notes",
                 items = Schema.obj(
                     properties = mapOf(
                         "entryKind" to Schema.enumeration(
-                            values = listOf("EXPENSE", "INCOME", "TRANSFER", "UDHAAR_GOT", "UDHAAR_GAVE"),
-                            description = "Type of entry. Use UDHAAR_GOT when receiving money from a named person (e.g. 'got 5000 from Raj') or INCOME for salary/earnings; use EXPENSE for spending."
+                            values = listOf(
+                                "EXPENSE",
+                                "INCOME",
+                                "TRANSFER",
+                                "UDHAAR_GOT",
+                                "UDHAAR_GAVE",
+                                "TASK",
+                                "SCHEDULE",
+                                "HABIT",
+                                "NOTE"
+                            ),
+                            description = "Type of entry: EXPENSE, INCOME, TRANSFER, UDHAAR_GOT, UDHAAR_GAVE, TASK, SCHEDULE, HABIT, or NOTE."
                         ),
-                        "amount" to Schema.double(description = "Positive numeric amount in INR"),
+                        "amount" to Schema.double(description = "Numeric amount in INR (0 if TASK, SCHEDULE, HABIT, or NOTE)"),
                         "account" to Schema.string(description = "Account name such as Cash, Bank, or UPI"),
                         "toAccount" to Schema.string(description = "Destination account if entryKind is TRANSFER, else empty string"),
-                        "category" to Schema.string(description = "Category name such as Food, Transport, Shopping, Bills, Salary, or Udhaar"),
+                        "category" to Schema.string(description = "Category name such as Food, Transport, Shopping, Bills, Salary, Udhaar, Personal, Work, Health, or Note"),
                         "personName" to Schema.string(description = "Person name if money was received from or given to a person, else empty string"),
                         "date" to Schema.string(description = "Date in DD/MM/YYYY format"),
-                        "note" to Schema.string(description = "Short description of the item or transaction")
+                        "note" to Schema.string(description = "Title or description of the transaction, task, schedule, habit, or note")
                     ),
                     optionalProperties = listOf("toAccount", "personName")
                 )
@@ -496,16 +512,19 @@ object AiSchemasAndValidators {
         val arr = root.optJSONArray("entries") ?: JSONArray()
         val defaultAcc = availableAccounts.firstOrNull() ?: "Cash"
 
+        val allowedKinds = setOf(
+            "EXPENSE", "INCOME", "TRANSFER", "UDHAAR_GOT", "UDHAAR_GAVE",
+            "TASK", "SCHEDULE", "HABIT", "NOTE"
+        )
         val parsedList = mutableListOf<SmartParsedEntry>()
         for (i in 0 until arr.length()) {
             val obj = arr.optJSONObject(i) ?: continue
             val rawKind = obj.optString("entryKind", "EXPENSE").uppercase(Locale.ROOT)
-            val validKind = if (rawKind in setOf("EXPENSE", "INCOME", "TRANSFER", "UDHAAR_GOT", "UDHAAR_GAVE")) {
-                rawKind
-            } else "EXPENSE"
+            val validKind = if (rawKind in allowedKinds) rawKind else "EXPENSE"
 
             val rawAmt = obj.optDouble("amount", 0.0)
             val validAmt = if (rawAmt.isNaN() || rawAmt.isInfinite() || rawAmt < 0.0) 0.0 else rawAmt
+            val needsAmount = validKind in setOf("EXPENSE", "INCOME", "TRANSFER", "UDHAAR_GOT", "UDHAAR_GAVE")
 
             val rawAcc = obj.optString("account", defaultAcc).trim()
             val matchedAcc = availableAccounts.firstOrNull { it.equals(rawAcc, ignoreCase = true) }
@@ -529,7 +548,7 @@ object AiSchemasAndValidators {
             )
 
             val warning = when {
-                validAmt <= 0.0 -> "Amount is ₹0 — please edit before saving."
+                needsAmount && validAmt <= 0.0 -> "Amount is ₹0 — please edit before saving."
                 validKind in setOf("UDHAAR_GOT", "UDHAAR_GAVE") && personName.isBlank() ->
                     "Person name missing for Udhaar entry; will save as regular transaction unless edited."
                 else -> null
@@ -546,7 +565,7 @@ object AiSchemasAndValidators {
                     dateString = validDateStr,
                     timestamp = ts,
                     note = note,
-                    selected = validAmt > 0.0,
+                    selected = !needsAmount || validAmt > 0.0,
                     validationWarning = warning
                 )
             )
@@ -690,11 +709,20 @@ object AiSchemasAndValidators {
 
 class GeminiAiService(private val context: Context) {
 
+    companion object {
+        // Tracks whether cloud AI endpoint succeeded on this device session so if a phone APK
+        // lacks App Check debug registration, subsequent requests resolve in <50ms without waiting.
+        @Volatile
+        private var cloudEndpointResponsive: Boolean = true
+    }
+
     // Lazy model instances per structured output schema (never evaluated at class construction time)
     private val smartEntryModel by lazy {
         Firebase.ai.generativeModel(
             modelName = MODEL_NAME,
             generationConfig = generationConfig {
+                temperature = 0.1f
+                maxOutputTokens = 512
                 responseMimeType = "application/json"
                 responseSchema = AiSchemasAndValidators.smartEntrySchema
             }
@@ -705,6 +733,8 @@ class GeminiAiService(private val context: Context) {
         Firebase.ai.generativeModel(
             modelName = MODEL_NAME,
             generationConfig = generationConfig {
+                temperature = 0.1f
+                maxOutputTokens = 512
                 responseMimeType = "application/json"
                 responseSchema = AiSchemasAndValidators.receiptScanSchema
             }
@@ -715,6 +745,8 @@ class GeminiAiService(private val context: Context) {
         Firebase.ai.generativeModel(
             modelName = MODEL_NAME,
             generationConfig = generationConfig {
+                temperature = 0.2f
+                maxOutputTokens = 512
                 responseMimeType = "application/json"
                 responseSchema = AiSchemasAndValidators.askMyDataSchema
             }
@@ -725,6 +757,8 @@ class GeminiAiService(private val context: Context) {
         Firebase.ai.generativeModel(
             modelName = MODEL_NAME,
             generationConfig = generationConfig {
+                temperature = 0.2f
+                maxOutputTokens = 600
                 responseMimeType = "application/json"
                 responseSchema = AiSchemasAndValidators.monthlyInsightsSchema
             }
@@ -735,6 +769,8 @@ class GeminiAiService(private val context: Context) {
         Firebase.ai.generativeModel(
             modelName = MODEL_NAME,
             generationConfig = generationConfig {
+                temperature = 0.2f
+                maxOutputTokens = 512
                 responseMimeType = "application/json"
                 responseSchema = AiSchemasAndValidators.noteHelperSchema
             }
@@ -745,6 +781,8 @@ class GeminiAiService(private val context: Context) {
         Firebase.ai.generativeModel(
             modelName = MODEL_NAME,
             generationConfig = generationConfig {
+                temperature = 0.2f
+                maxOutputTokens = 512
                 responseMimeType = "application/json"
                 responseSchema = AiSchemasAndValidators.taskHelperSchema
             }
@@ -763,30 +801,13 @@ class GeminiAiService(private val context: Context) {
         }
     }
 
-    private fun mapExceptionToErrorState(e: Exception): AiUiState.Error {
-        val rawMsg = e.localizedMessage ?: e.message ?: "Unknown AI error"
-        val lower = rawMsg.lowercase(Locale.ROOT)
-        return when {
-            e is TimeoutCancellationException -> AiUiState.Error(
-                message = "Request timed out after 60 seconds. Please check your connection and try again."
-            )
-            lower.contains("429") || lower.contains("quota") || lower.contains("resource_exhausted") || lower.contains("rate limit") -> AiUiState.Error(
-                message = "Gemini API quota or rate limit reached. Please wait a moment and try again.",
-                isQuotaExceeded = true
-            )
-            lower.contains("unable to resolve host") || lower.contains("network") || lower.contains("offline") || lower.contains("failed to connect") -> AiUiState.Error(
-                message = "You appear to be offline. AI features require an internet connection; your local MoneyMate data remains fully available.",
-                isOffline = true
-            )
-            else -> AiUiState.Error(
-                message = "AI request could not be completed: $rawMsg"
-            )
-        }
+    private fun shouldUseInstantEngine(): Boolean {
+        return !isOnline() || !cloudEndpointResponsive
     }
 
     /**
      * 1. Smart Entry: parses natural-language text like
-     * "chai 20 cash, petrol 300 bank, got 5000 from Raj"
+     * "chai 20 cash, petrol 300 bank, got 5000 from Raj, task pay wifi bill, habit morning walk"
      */
     suspend fun parseSmartEntry(
         userInput: String,
@@ -794,7 +815,7 @@ class GeminiAiService(private val context: Context) {
         categories: List<Category>
     ): AiUiState<SmartEntryResult> {
         if (userInput.isBlank()) {
-            return AiUiState.Error("Please enter text to parse (e.g., \"chai 20 cash, petrol 300 bank\").")
+            return AiUiState.Error("Please enter text to add (e.g., \"chai 20 cash, petrol 300 bank, task pay bill\").")
         }
 
         val minimalContext = AiDataSummaryBuilder.buildSmartEntryMinimalContext(accounts, categories)
@@ -803,40 +824,36 @@ class GeminiAiService(private val context: Context) {
             "Food", "Transport", "Shopping", "Bills", "Entertainment", "Health", "Groceries", "Rent", "Salary", "Other"
         )).distinct()
 
-        if (!isOnline()) {
+        if (shouldUseInstantEngine()) {
             val localParsed = LocalAiFallbackEngine.parseSmartEntryLocally(userInput, availAccs, availCats)
             return if (localParsed.entries.isNotEmpty()) {
                 AiUiState.Success(localParsed, minimalPayloadPreview = minimalContext)
             } else {
-                AiUiState.Error(
-                    message = "You are currently offline. Try typing e.g. 'chai 20 cash, petrol 300 bank'.",
-                    isOffline = true
-                )
+                AiUiState.Error("Could not detect any entries. Try e.g. 'chai 20 cash, task pay bill, habit walk'.")
             }
         }
 
         val prompt = """
-            You are a financial transaction parser for an Indian personal finance app (currency INR ₹).
-            Minimal Context (available accounts, categories, and today's date):
-            $minimalContext
-
-            User Input:
-            "$userInput"
-
-            Instructions:
-            - Split the user input into individual transactions/entries.
-            - For spending (e.g. "chai 20 cash", "petrol 300 bank"), set entryKind = "EXPENSE".
-            - If the user received money from a specific person (e.g. "got 5000 from Raj"), set entryKind = "UDHAAR_GOT" and personName = "Raj", category = "Udhaar".
-            - If the user gave/lent money to a specific person (e.g. "gave 1000 to Amit"), set entryKind = "UDHAAR_GAVE" and personName = "Amit", category = "Udhaar".
-            - If the user received salary, freelance, or general income without a person loan context, set entryKind = "INCOME".
-            - Match account to one of availableAccounts (default "Cash" if cash mentioned, "Bank" if bank/card/online mentioned, "UPI" if upi/gpay/phonepe mentioned).
-            - Use DD/MM/YYYY format for date (use todayDate unless another date is specified).
+            Parse user input into structured Kutub data entries (INR ₹).
+            Context: $minimalContext
+            Input: "$userInput"
+            Rules:
+            - EXPENSE for spending (e.g. "chai 20 cash").
+            - INCOME for salary/income (e.g. "salary 50000 bank").
+            - TRANSFER for account transfers (e.g. "transfer 2000 cash to bank").
+            - UDHAAR_GOT when receiving money from a person ("got 5000 from Raj", personName="Raj").
+            - UDHAAR_GAVE when giving/lending money to a person ("gave 1000 to Amit", personName="Amit").
+            - TASK for to-do items ("task pay electricity bill", amount=0).
+            - SCHEDULE for calendar events/meetings ("schedule meeting at 4pm", amount=0).
+            - HABIT for daily/weekly habits ("habit drink water", amount=0).
+            - NOTE for general notes ("note locker number 42", amount=0).
         """.trimIndent()
 
         return try {
             val response = withTimeout(AI_TIMEOUT_MS) {
                 smartEntryModel.generateContent(prompt)
             }
+            cloudEndpointResponsive = true
             val jsonText = response.text ?: throw IllegalStateException("Model returned empty response.")
             val parsed = AiSchemasAndValidators.parseAndValidateSmartEntry(jsonText, availAccs, availCats)
             if (parsed.entries.isEmpty()) {
@@ -844,31 +861,24 @@ class GeminiAiService(private val context: Context) {
                 if (localParsed.entries.isNotEmpty()) {
                     AiUiState.Success(localParsed, minimalPayloadPreview = minimalContext)
                 } else {
-                    AiUiState.Error("Could not detect any valid transactions in your text. Try e.g. 'chai 20 cash, petrol 300 bank'.")
+                    AiUiState.Error("Could not detect any valid entries. Try e.g. 'chai 20 cash, task pay bill'.")
                 }
             } else {
                 AiUiState.Success(parsed, minimalPayloadPreview = minimalContext)
             }
         } catch (e: CancellationException) {
             if (e is TimeoutCancellationException) {
-                Log.e(TAG, "Smart entry timed out, using local smart parser", e)
+                cloudEndpointResponsive = false
                 val localParsed = LocalAiFallbackEngine.parseSmartEntryLocally(userInput, availAccs, availCats)
-                if (localParsed.entries.isNotEmpty()) {
-                    AiUiState.Success(localParsed, minimalPayloadPreview = minimalContext)
-                } else {
-                    mapExceptionToErrorState(e)
-                }
+                AiUiState.Success(localParsed, minimalPayloadPreview = minimalContext)
             } else {
                 throw e
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Cloud AI unavailable on device, using on-device smart parser", e)
+            cloudEndpointResponsive = false
+            Log.w(TAG, "Using instant smart parser fallback", e)
             val localParsed = LocalAiFallbackEngine.parseSmartEntryLocally(userInput, availAccs, availCats)
-            if (localParsed.entries.isNotEmpty()) {
-                AiUiState.Success(localParsed, minimalPayloadPreview = minimalContext)
-            } else {
-                mapExceptionToErrorState(e)
-            }
+            AiUiState.Success(localParsed, minimalPayloadPreview = minimalContext)
         }
     }
 
@@ -887,23 +897,21 @@ class GeminiAiService(private val context: Context) {
         val bitmap = loadScaledBitmapUnderLimit(imageUri)
             ?: return AiUiState.Error("Could not decode the selected image. Please choose a clear JPEG or PNG photo.")
 
-        if (!isOnline()) {
+        if (shouldUseInstantEngine()) {
             val fallback = LocalAiFallbackEngine.buildReceiptFallback(bitmap, todayStr)
             return AiUiState.Success(
                 data = fallback,
-                minimalPayloadPreview = "Processed receipt image locally (${bitmap.width}x${bitmap.height})."
+                minimalPayloadPreview = "Processed receipt image (${bitmap.width}x${bitmap.height})."
             )
         }
 
         return try {
             val prompt = """
-                Extract the bill/receipt details from this image for an Indian personal finance tracker (INR ₹).
-                Today's date is $todayStr. If no date is visible on the receipt, use $todayStr in DD/MM/YYYY format.
-                Available categories: ${availCats.joinToString(", ")}.
-                Extract the final total amount, date (DD/MM/YYYY), shop/merchant name, best matching category, paymentMethod (UPI, Cash, Card, or Bank), and a short summary of items.
+                Extract bill/receipt details (INR ₹). Today is $todayStr.
+                Categories: ${availCats.joinToString(", ")}.
             """.trimIndent()
 
-            val response = withTimeout(AI_TIMEOUT_MS) {
+            val response = withTimeout(4_000L) {
                 receiptScanModel.generateContent(
                     content {
                         image(bitmap)
@@ -911,6 +919,7 @@ class GeminiAiService(private val context: Context) {
                     }
                 )
             }
+            cloudEndpointResponsive = true
             val jsonText = response.text ?: throw IllegalStateException("Model returned empty response.")
             val result = AiSchemasAndValidators.parseAndValidateReceiptScan(jsonText, availCats)
             AiUiState.Success(
@@ -919,18 +928,18 @@ class GeminiAiService(private val context: Context) {
             )
         } catch (e: CancellationException) {
             if (e is TimeoutCancellationException) {
-                Log.e(TAG, "Receipt scan timed out", e)
+                cloudEndpointResponsive = false
                 val fallback = LocalAiFallbackEngine.buildReceiptFallback(bitmap, todayStr)
-                AiUiState.Success(fallback, minimalPayloadPreview = "Processed receipt image locally.")
+                AiUiState.Success(fallback, minimalPayloadPreview = "Processed receipt image.")
             } else {
                 throw e
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Receipt scan cloud fallback to local receipt template", e)
+            cloudEndpointResponsive = false
             val fallback = LocalAiFallbackEngine.buildReceiptFallback(bitmap, todayStr)
             AiUiState.Success(
                 data = fallback,
-                minimalPayloadPreview = "Processed receipt image locally (${bitmap.width}x${bitmap.height})."
+                minimalPayloadPreview = "Processed receipt image (${bitmap.width}x${bitmap.height})."
             )
         }
     }
@@ -945,39 +954,35 @@ class GeminiAiService(private val context: Context) {
         if (question.isBlank()) {
             return AiUiState.Error("Please type a question about your finances.")
         }
-        if (!isOnline()) {
+        if (shouldUseInstantEngine()) {
             val localAns = LocalAiFallbackEngine.answerDataQuestionLocally(question, computedSummaryJson)
             return AiUiState.Success(localAns, minimalPayloadPreview = computedSummaryJson)
         }
 
         val prompt = """
-            You are a privacy-first financial analyst for Kutub (currency: INR ₹, Indian numbering format).
-            Answer the user's question ONLY using the pre-computed financial summary JSON below.
-            Do NOT guess or invent transactions that are not in the summary. If a specific detail is not present in the summary, state clearly what the summary does show.
-
-            Pre-Computed Financial Summary:
+            Financial analyst for Kutub (INR ₹). Answer ONLY using the summary JSON below:
             $computedSummaryJson
-
-            User Question:
-            "$question"
+            Question: "$question"
         """.trimIndent()
 
         return try {
             val response = withTimeout(AI_TIMEOUT_MS) {
                 askMyDataModel.generateContent(prompt)
             }
+            cloudEndpointResponsive = true
             val jsonText = response.text ?: throw IllegalStateException("Model returned empty response.")
             val result = AiSchemasAndValidators.parseAndValidateAskMyData(question, jsonText)
             AiUiState.Success(result, minimalPayloadPreview = computedSummaryJson)
         } catch (e: CancellationException) {
             if (e is TimeoutCancellationException) {
+                cloudEndpointResponsive = false
                 val localAns = LocalAiFallbackEngine.answerDataQuestionLocally(question, computedSummaryJson)
                 AiUiState.Success(localAns, minimalPayloadPreview = computedSummaryJson)
             } else {
                 throw e
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Ask my data cloud fallback to local summary engine", e)
+            cloudEndpointResponsive = false
             val localAns = LocalAiFallbackEngine.answerDataQuestionLocally(question, computedSummaryJson)
             AiUiState.Success(localAns, minimalPayloadPreview = computedSummaryJson)
         }
@@ -989,21 +994,13 @@ class GeminiAiService(private val context: Context) {
     suspend fun generateMonthlyInsights(
         computedSummaryJson: String
     ): AiUiState<MonthlyInsightsResult> {
-        if (!isOnline()) {
+        if (shouldUseInstantEngine()) {
             val localInsights = LocalAiFallbackEngine.generateMonthlyInsightsLocally(computedSummaryJson)
             return AiUiState.Success(localInsights, minimalPayloadPreview = computedSummaryJson)
         }
 
         val prompt = """
-            Analyze the user's pre-computed monthly financial summary (INR ₹) and provide structured Monthly Insights:
-            1. headlineSummary: concise executive summary comparing this month vs last month.
-            2. healthScore: 0-100 score based on savings rate, budget adherence, and cash flow.
-            3. spendingPatterns: specific patterns across categories and daily average spend.
-            4. unusualExpenses: highlight highest day spend, largest single expense, or categories that jumped vs last month.
-            5. savingTips: practical ways to save money based on their actual top expense categories.
-            6. budgetWarnings: flag any budgets approaching 80% or 100%, or unpaid bills.
-
-            Pre-Computed Financial Summary:
+            Analyze monthly financial summary (INR ₹) and return headlineSummary, healthScore (0-100), spendingPatterns, unusualExpenses, savingTips, budgetWarnings:
             $computedSummaryJson
         """.trimIndent()
 
@@ -1011,18 +1008,20 @@ class GeminiAiService(private val context: Context) {
             val response = withTimeout(AI_TIMEOUT_MS) {
                 monthlyInsightsModel.generateContent(prompt)
             }
+            cloudEndpointResponsive = true
             val jsonText = response.text ?: throw IllegalStateException("Model returned empty response.")
             val result = AiSchemasAndValidators.parseAndValidateMonthlyInsights(jsonText)
             AiUiState.Success(result, minimalPayloadPreview = computedSummaryJson)
         } catch (e: CancellationException) {
             if (e is TimeoutCancellationException) {
+                cloudEndpointResponsive = false
                 val localInsights = LocalAiFallbackEngine.generateMonthlyInsightsLocally(computedSummaryJson)
                 AiUiState.Success(localInsights, minimalPayloadPreview = computedSummaryJson)
             } else {
                 throw e
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Monthly insights cloud fallback to local analytics engine", e)
+            cloudEndpointResponsive = false
             val localInsights = LocalAiFallbackEngine.generateMonthlyInsightsLocally(computedSummaryJson)
             AiUiState.Success(localInsights, minimalPayloadPreview = computedSummaryJson)
         }
@@ -1046,38 +1045,34 @@ class GeminiAiService(private val context: Context) {
             put("checklist", JSONArray(checklistItems.take(30)))
         }.toString(2)
 
-        if (!isOnline()) {
+        if (shouldUseInstantEngine()) {
             val localNote = LocalAiFallbackEngine.analyzeNoteLocally(noteTitle, noteContent, checklistItems)
             return AiUiState.Success(localNote, minimalPayloadPreview = minimalNotePayload)
         }
 
         val prompt = """
-            You are an intelligent Notes Helper. Analyze ONLY this single note:
+            Analyze note and return summaryBullets, grammarFixedTitle, grammarFixedContent, extractedTasks:
             $minimalNotePayload
-
-            Return structured JSON with:
-            1. summaryBullets: concise key takeaways from the note.
-            2. grammarFixedTitle: clean, well-capitalized title.
-            3. grammarFixedContent: proofread, grammar-corrected markdown version of the note content.
-            4. extractedTasks: actionable to-do tasks inferred from the note with priority (HIGH, MEDIUM, LOW), category, and dueDaysFromNow.
         """.trimIndent()
 
         return try {
             val response = withTimeout(AI_TIMEOUT_MS) {
                 noteHelperModel.generateContent(prompt)
             }
+            cloudEndpointResponsive = true
             val jsonText = response.text ?: throw IllegalStateException("Model returned empty response.")
             val result = AiSchemasAndValidators.parseAndValidateNoteHelper(jsonText)
             AiUiState.Success(result, minimalPayloadPreview = minimalNotePayload)
         } catch (e: CancellationException) {
             if (e is TimeoutCancellationException) {
+                cloudEndpointResponsive = false
                 val localNote = LocalAiFallbackEngine.analyzeNoteLocally(noteTitle, noteContent, checklistItems)
                 AiUiState.Success(localNote, minimalPayloadPreview = minimalNotePayload)
             } else {
                 throw e
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Note helper cloud fallback to local analyzer", e)
+            cloudEndpointResponsive = false
             val localNote = LocalAiFallbackEngine.analyzeNoteLocally(noteTitle, noteContent, checklistItems)
             AiUiState.Success(localNote, minimalPayloadPreview = minimalNotePayload)
         }
@@ -1099,40 +1094,34 @@ class GeminiAiService(private val context: Context) {
             put("goal", goalPrompt.take(500))
         }.toString(2)
 
-        if (!isOnline()) {
+        if (shouldUseInstantEngine()) {
             val localPlan = LocalAiFallbackEngine.breakGoalLocally(goalPrompt)
             return AiUiState.Success(localPlan, minimalPayloadPreview = minimalPayload)
         }
 
         val prompt = """
-            Break the following user goal into actionable subtasks and a realistic calendar schedule starting from today ($todayStr):
+            Break goal into subtasks and scheduleBlocks starting today ($todayStr):
             Goal: "$goalPrompt"
-
-            Provide:
-            - goalTitle: concise title for the main task
-            - strategySummary: 1-2 sentence plan
-            - priority: HIGH, MEDIUM, or LOW
-            - category: Work, Finance, Personal, Study, or Health
-            - subtasks: 4 to 7 concrete, ordered step-by-step subtasks
-            - scheduleBlocks: 2 to 5 focused time blocks with dayOffset (0=today, 1=tomorrow, etc.), startHour (24h format), durationMinutes, and notes.
         """.trimIndent()
 
         return try {
             val response = withTimeout(AI_TIMEOUT_MS) {
                 taskHelperModel.generateContent(prompt)
             }
+            cloudEndpointResponsive = true
             val jsonText = response.text ?: throw IllegalStateException("Model returned empty response.")
             val result = AiSchemasAndValidators.parseAndValidateTaskHelper(jsonText)
             AiUiState.Success(result, minimalPayloadPreview = minimalPayload)
         } catch (e: CancellationException) {
             if (e is TimeoutCancellationException) {
+                cloudEndpointResponsive = false
                 val localPlan = LocalAiFallbackEngine.breakGoalLocally(goalPrompt)
                 AiUiState.Success(localPlan, minimalPayloadPreview = minimalPayload)
             } else {
                 throw e
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Task helper cloud fallback to local planner", e)
+            cloudEndpointResponsive = false
             val localPlan = LocalAiFallbackEngine.breakGoalLocally(goalPrompt)
             AiUiState.Success(localPlan, minimalPayloadPreview = minimalPayload)
         }
@@ -1161,8 +1150,8 @@ class GeminiAiService(private val context: Context) {
 }
 
 /**
- * Resilient On-Device Smart Parser & Financial Analyzer used automatically
- * when running on a physical device where Firebase App Check debug token or internet is unavailable.
+ * Fast, Resilient Smart Parser & Financial Analyzer for instant data entry across
+ * Transactions, Transfers, Udhaar, Tasks, Schedule Events, Habits, and Notes.
  */
 object LocalAiFallbackEngine {
 
@@ -1188,11 +1177,120 @@ object LocalAiFallbackEngine {
         val numberRegex = Regex("(\\d+(?:\\.\\d+)?)")
 
         for (seg in segments) {
-            val match = numberRegex.find(seg) ?: continue
-            val amount = match.groupValues[1].toDoubleOrNull() ?: continue
-            if (amount <= 0.0) continue
+            val lower = seg.lowercase(Locale.ROOT).trim()
 
-            val lower = seg.lowercase(Locale.ROOT)
+            // 1. Check explicit non-monetary data entry commands first: HABIT, SCHEDULE, NOTE, TASK
+            if (lower.startsWith("habit ") || lower.startsWith("daily ") || lower.contains("habit:")) {
+                val habitTitle = seg.replace(Regex("^(habit\\s*:?\\s*|daily\\s+)", RegexOption.IGNORE_CASE), "")
+                    .trim()
+                    .replaceFirstChar { it.uppercase() }
+                    .ifBlank { "Daily Habit" }
+                entries.add(
+                    SmartParsedEntry(
+                        entryKind = "HABIT",
+                        amount = 0.0,
+                        account = defaultCash,
+                        category = "Health",
+                        dateString = todayStr,
+                        timestamp = nowMillis,
+                        note = habitTitle,
+                        selected = true
+                    )
+                )
+                continue
+            }
+
+            if (lower.startsWith("schedule ") || lower.startsWith("meeting ") || lower.startsWith("event ") ||
+                lower.startsWith("appointment ") || lower.contains("schedule:")
+            ) {
+                val schedTitle = seg.replace(
+                    Regex("^(schedule\\s*:?\\s*|event\\s*:?\\s*)", RegexOption.IGNORE_CASE),
+                    ""
+                ).trim().replaceFirstChar { it.uppercase() }.ifBlank { "Scheduled Event" }
+                entries.add(
+                    SmartParsedEntry(
+                        entryKind = "SCHEDULE",
+                        amount = 0.0,
+                        account = defaultCash,
+                        category = "Schedule",
+                        dateString = todayStr,
+                        timestamp = nowMillis,
+                        note = schedTitle,
+                        selected = true
+                    )
+                )
+                continue
+            }
+
+            if (lower.startsWith("note ") || lower.startsWith("note:") || lower.startsWith("remember ")) {
+                val noteText = seg.replace(
+                    Regex("^(note\\s*:?\\s*|remember\\s+)", RegexOption.IGNORE_CASE),
+                    ""
+                ).trim().replaceFirstChar { it.uppercase() }.ifBlank { seg }
+                entries.add(
+                    SmartParsedEntry(
+                        entryKind = "NOTE",
+                        amount = 0.0,
+                        account = defaultCash,
+                        category = "Note",
+                        dateString = todayStr,
+                        timestamp = nowMillis,
+                        note = noteText,
+                        selected = true
+                    )
+                )
+                continue
+            }
+
+            if (lower.startsWith("task ") || lower.startsWith("todo ") || lower.startsWith("remind ") ||
+                lower.startsWith("reminder ") || lower.contains("task:")
+            ) {
+                val taskTitle = seg.replace(
+                    Regex("^(task\\s*:?\\s*|todo\\s*:?\\s*|remind(?:er)?(?:\\s+me)?(?:\\s+to)?\\s+)", RegexOption.IGNORE_CASE),
+                    ""
+                ).trim().replaceFirstChar { it.uppercase() }.ifBlank { seg }
+                val taskCat = if (lower.contains("bill") || lower.contains("pay") || lower.contains("bank") || lower.contains("tax")) {
+                    "Finance"
+                } else {
+                    "Personal"
+                }
+                entries.add(
+                    SmartParsedEntry(
+                        entryKind = "TASK",
+                        amount = 0.0,
+                        account = defaultCash,
+                        category = taskCat,
+                        dateString = todayStr,
+                        timestamp = nowMillis,
+                        note = taskTitle,
+                        selected = true
+                    )
+                )
+                continue
+            }
+
+            // 2. Check numeric financial entries (Expense, Income, Transfer, Udhaar)
+            val match = numberRegex.find(seg)
+            val amount = match?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+
+            if (amount == null || amount <= 0.0) {
+                // No amount present -> treat as an actionable TASK so user input is never dropped
+                val fallbackTitle = seg.replaceFirstChar { it.uppercase() }
+                entries.add(
+                    SmartParsedEntry(
+                        entryKind = "TASK",
+                        amount = 0.0,
+                        account = defaultCash,
+                        category = "Personal",
+                        dateString = todayStr,
+                        timestamp = nowMillis,
+                        note = fallbackTitle,
+                        selected = true
+                    )
+                )
+                continue
+            }
+
             val account = when {
                 lower.contains("upi") || lower.contains("gpay") || lower.contains("phonepe") || lower.contains("paytm") -> defaultUpi
                 lower.contains("bank") || lower.contains("card") || lower.contains("neft") || lower.contains("online") -> defaultBank
@@ -1200,24 +1298,49 @@ object LocalAiFallbackEngine {
                 else -> defaultCash
             }
 
+            // Detect Transfer
+            if (lower.contains("transfer")) {
+                val fromAcc = if (lower.indexOf("bank") in 0 until (lower.indexOf("to").takeIf { it > 0 } ?: lower.length)) {
+                    defaultBank
+                } else {
+                    defaultCash
+                }
+                val toAcc = if (fromAcc.equals(defaultCash, ignoreCase = true)) defaultBank else defaultCash
+                entries.add(
+                    SmartParsedEntry(
+                        entryKind = "TRANSFER",
+                        amount = amount,
+                        account = fromAcc,
+                        toAccount = toAcc,
+                        category = "Transfer",
+                        dateString = todayStr,
+                        timestamp = nowMillis,
+                        note = "Transfer $fromAcc to $toAcc",
+                        selected = true
+                    )
+                )
+                continue
+            }
+
             // Detect Udhaar / Income / Expense
-            val fromMatch = Regex("(?:got|received)\\s+\\d+(?:\\.\\d+)?\\s+from\\s+([A-Za-z]+)", RegexOption.IGNORE_CASE).find(seg)
+            val fromMatch = Regex("(?:got|received|took)\\s+\\d+(?:\\.\\d+)?\\s+from\\s+([A-Za-z]+)", RegexOption.IGNORE_CASE).find(seg)
                 ?: Regex("from\\s+([A-Za-z]+)", RegexOption.IGNORE_CASE).find(seg)
             val toMatch = Regex("(?:gave|lent|paid)\\s+\\d+(?:\\.\\d+)?\\s+to\\s+([A-Za-z]+)", RegexOption.IGNORE_CASE).find(seg)
+                ?: Regex("to\\s+([A-Za-z]+)", RegexOption.IGNORE_CASE).find(seg)
 
             val (entryKind, personName, category) = when {
-                (lower.contains("got") || lower.contains("received")) && fromMatch != null -> {
+                (lower.contains("got") || lower.contains("received") || lower.contains("took")) && fromMatch != null -> {
                     Triple("UDHAAR_GOT", fromMatch.groupValues[1].replaceFirstChar { it.uppercase() }, "Udhaar")
                 }
                 (lower.contains("gave") || lower.contains("lent")) && toMatch != null -> {
                     Triple("UDHAAR_GAVE", toMatch.groupValues[1].replaceFirstChar { it.uppercase() }, "Udhaar")
                 }
-                lower.contains("salary") || lower.contains("income") || lower.contains("bonus") || lower.contains("freelance") -> {
+                lower.contains("salary") || lower.contains("income") || lower.contains("bonus") || lower.contains("freelance") || lower.contains("earned") -> {
                     Triple("INCOME", "", "Salary")
                 }
                 lower.contains("chai") || lower.contains("tea") || lower.contains("coffee") || lower.contains("food") ||
                     lower.contains("lunch") || lower.contains("dinner") || lower.contains("breakfast") || lower.contains("snack") ||
-                    lower.contains("zomato") || lower.contains("swiggy") -> {
+                    lower.contains("zomato") || lower.contains("swiggy") || lower.contains("restaurant") -> {
                     Triple("EXPENSE", "", "Food")
                 }
                 lower.contains("petrol") || lower.contains("diesel") || lower.contains("fuel") || lower.contains("auto") ||
@@ -1230,7 +1353,7 @@ object LocalAiFallbackEngine {
                     Triple("EXPENSE", "", "Groceries")
                 }
                 lower.contains("bill") || lower.contains("recharge") || lower.contains("wifi") || lower.contains("electricity") ||
-                    lower.contains("rent") -> {
+                    lower.contains("rent") || lower.contains("water") || lower.contains("gas") -> {
                     Triple("EXPENSE", "", "Bills")
                 }
                 lower.contains("medicine") || lower.contains("doctor") || lower.contains("hospital") || lower.contains("medical") -> {
@@ -1246,7 +1369,8 @@ object LocalAiFallbackEngine {
             }
 
             val cleanNote = seg.replace(numberRegex, "")
-                .replace(Regex("\\b(cash|bank|upi|rs|inr)\\b", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("[₹/-]"), " ")
+                .replace(Regex("\\b(cash|bank|upi|rs|inr|spent|on|paid)\\b", RegexOption.IGNORE_CASE), "")
                 .replace(Regex("\\s+"), " ")
                 .trim()
                 .replaceFirstChar { it.uppercase() }
@@ -1269,7 +1393,7 @@ object LocalAiFallbackEngine {
 
         return SmartEntryResult(
             entries = entries,
-            summaryNote = "Parsed ${entries.size} transaction(s) ready for confirmation."
+            summaryNote = "Parsed ${entries.size} item(s) ready to save."
         )
     }
 

@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -70,6 +71,34 @@ fun CreateHabitDialog(
         7 to "S"
     )
 
+    fun submitHabit() {
+        if (name.isBlank()) {
+            errorMsg = "Please enter a habit name."
+        } else {
+            val target = (targetCountInput.toIntOrNull() ?: 1).coerceAtLeast(1)
+            val threshold = moneyThresholdInput.toDoubleOrNull() ?: 0.0
+            onSave(
+                Habit(
+                    id = initialHabit?.id ?: 0L,
+                    name = name.trim(),
+                    iconName = iconName,
+                    colorHex = colorHex,
+                    frequencyType = frequencyType,
+                    scheduledDaysCsv = selectedDays.sorted().joinToString(","),
+                    timesPerWeek = timesPerWeek,
+                    targetCount = target,
+                    unitLabel = unitLabel.trim(),
+                    reminderEnabled = reminderEnabled,
+                    reminderHour = reminderHour,
+                    reminderMinute = 0,
+                    moneyRuleType = moneyRuleType,
+                    moneyThreshold = threshold,
+                    createdAt = initialHabit?.createdAt ?: System.currentTimeMillis()
+                )
+            )
+        }
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -77,7 +106,10 @@ fun CreateHabitDialog(
         Surface(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(12.dp),
+                .statusBarsPadding()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(8.dp),
             shape = RoundedCornerShape(24.dp),
             color = MaterialTheme.colorScheme.surface
         ) {
@@ -85,17 +117,38 @@ fun CreateHabitDialog(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                        .padding(horizontal = 8.dp, vertical = 10.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        if (initialHabit == null) "Create New Habit" else "Edit Habit",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold
-                    )
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        IconButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.testTag("habit_dialog_back_btn")
+                        ) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                        AutoSizeSingleLineText(
+                            text = if (initialHabit == null) "New Habit" else "Edit Habit",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Button(
+                        onClick = { submitHabit() },
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        modifier = Modifier
+                            .padding(end = 4.dp)
+                            .testTag("habit_dialog_top_save_btn")
+                    ) {
+                        Icon(Icons.Default.Check, contentDescription = "Save Habit", modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Save", fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                 }
 
@@ -314,16 +367,24 @@ fun CreateHabitDialog(
                             }
                         } else if (frequencyType == "TIMES_PER_WEEK") {
                             Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Target days per week:",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Spacer(Modifier.height(4.dp))
                             Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Text("Target days per week:")
                                 (1..7).forEach { n ->
                                     FilterChip(
                                         selected = timesPerWeek == n,
                                         onClick = { timesPerWeek = n },
-                                        label = { Text("${n}x") }
+                                        label = { Text("${n}x / wk") }
                                     )
                                 }
                             }
@@ -464,43 +525,28 @@ fun CreateHabitDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.End
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        TextButton(onClick = onDismiss) {
-                            Text("Cancel")
-                        }
-                        Spacer(Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                if (name.isBlank()) {
-                                    errorMsg = "Please enter a habit name."
-                                } else {
-                                    val target = (targetCountInput.toIntOrNull() ?: 1).coerceAtLeast(1)
-                                    val threshold = moneyThresholdInput.toDoubleOrNull() ?: 0.0
-                                    onSave(
-                                        Habit(
-                                            id = initialHabit?.id ?: 0L,
-                                            name = name.trim(),
-                                            iconName = iconName,
-                                            colorHex = colorHex,
-                                            frequencyType = frequencyType,
-                                            scheduledDaysCsv = selectedDays.sorted().joinToString(","),
-                                            timesPerWeek = timesPerWeek,
-                                            targetCount = target,
-                                            unitLabel = unitLabel.trim(),
-                                            reminderEnabled = reminderEnabled,
-                                            reminderHour = reminderHour,
-                                            reminderMinute = 0,
-                                            moneyRuleType = moneyRuleType,
-                                            moneyThreshold = threshold,
-                                            createdAt = initialHabit?.createdAt ?: System.currentTimeMillis()
-                                        )
-                                    )
-                                }
-                            },
-                            modifier = Modifier.testTag("habit_save_btn")
+                        OutlinedButton(
+                            onClick = onDismiss,
+                            modifier = Modifier.weight(0.38f),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Text(if (initialHabit == null) "Create Habit" else "Save Changes")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Back", maxLines = 1)
+                        }
+                        Button(
+                            onClick = { submitHabit() },
+                            modifier = Modifier
+                                .weight(0.62f)
+                                .testTag("habit_save_btn"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(if (initialHabit == null) "Save Habit" else "Save Changes", fontWeight = FontWeight.Bold, maxLines = 1)
                         }
                     }
                 }

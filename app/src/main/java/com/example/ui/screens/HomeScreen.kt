@@ -23,6 +23,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
@@ -46,18 +47,12 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE) }
     var userName by remember { mutableStateOf(FormatUtils.resolveUserDisplayName(prefs)) }
-    var tzMode by remember { mutableStateOf(prefs.getString("greeting_tz_mode", "IST") ?: "IST") }
-    var periodOverride by remember { mutableStateOf(prefs.getString("greeting_period_override", "AUTO") ?: "AUTO") }
 
     DisposableEffect(prefs) {
         userName = FormatUtils.resolveUserDisplayName(prefs)
-        tzMode = prefs.getString("greeting_tz_mode", "IST") ?: "IST"
-        periodOverride = prefs.getString("greeting_period_override", "AUTO") ?: "AUTO"
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
-            when (key) {
-                "user_name" -> userName = FormatUtils.resolveUserDisplayName(sp)
-                "greeting_tz_mode" -> tzMode = sp.getString("greeting_tz_mode", "IST") ?: "IST"
-                "greeting_period_override" -> periodOverride = sp.getString("greeting_period_override", "AUTO") ?: "AUTO"
+            if (key == "user_name") {
+                userName = FormatUtils.resolveUserDisplayName(sp)
             }
         }
         prefs.registerOnSharedPreferenceChangeListener(listener)
@@ -109,23 +104,18 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
     fun formatMoney(amount: Double): String =
         if (privacyMode) "${FormatUtils.currentCurrencySymbol}••••" else FormatUtils.formatInr(amount)
 
-    // Live-updating clock & time-of-day greeting (Morning, Afternoon, Evening, Night)
+    // Automatic phone clock & time-of-day greeting
     var currentNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
             currentNowMillis = System.currentTimeMillis()
-            delay(10_000L)
+            delay(30_000L)
         }
     }
-    val greetingSnapshot = remember(currentNowMillis, tzMode, periodOverride) {
-        FormatUtils.computeGreetingTimeSnapshot(
-            nowMillis = currentNowMillis,
-            timeZoneMode = tzMode,
-            overridePeriod = periodOverride
-        )
+    val greetingSnapshot = remember(currentNowMillis) {
+        FormatUtils.computeGreetingTimeSnapshot(nowMillis = currentNowMillis)
     }
     val greeting = greetingSnapshot.greetingEnglish
-    val todayDateFormatted = "${greetingSnapshot.formattedTime} ${greetingSnapshot.timeZoneLabel} • ${greetingSnapshot.greetingGujarati} • ${greetingSnapshot.formattedDate}"
 
     // Today's Spend calculation
     val todaySpend = remember(transactions) {
@@ -178,6 +168,8 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
     var showQuickNoteDialog by remember { mutableStateOf(false) }
     var showQuickTaskDialog by remember { mutableStateOf(false) }
     var showAddEventFromHome by remember { mutableStateOf(false) }
+    var taskToEditFromHome by remember { mutableStateOf<com.example.data.TaskItem?>(null) }
+    var eventToEditFromHome by remember { mutableStateOf<com.example.data.ScheduleEvent?>(null) }
     var showGlobalSearchDialog by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
@@ -289,6 +281,64 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
         )
     }
 
+    if (taskToEditFromHome != null) {
+        val editingTask = taskToEditFromHome!!
+        AddTaskDialog(
+            onDismiss = { taskToEditFromHome = null },
+            accounts = accounts,
+            categories = categories,
+            existingTask = editingTask,
+            onSaveTask = { title, desc, prio, cat, due, repeat, subtasks, isMoney, amt, acc, lCat, reminder ->
+                viewModel.updateTask(
+                    editingTask.copy(
+                        title = title,
+                        description = desc,
+                        priority = prio,
+                        category = cat,
+                        dueDateTime = due,
+                        repeatFrequency = repeat,
+                        subtasksJson = com.example.utils.TaskUtils.serializeSubtasks(subtasks),
+                        isLinkedToMoney = isMoney,
+                        linkedAmount = amt,
+                        linkedAccount = acc,
+                        linkedCategory = lCat,
+                        reminderEnabled = reminder
+                    )
+                )
+                taskToEditFromHome = null
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Task \"$title\" updated!")
+                }
+            }
+        )
+    }
+
+    if (eventToEditFromHome != null) {
+        val editingEvt = eventToEditFromHome!!
+        AddScheduleEventDialog(
+            onDismiss = { eventToEditFromHome = null },
+            existingEvent = editingEvt,
+            onSaveEvent = { title, desc, start, end, loc, cat, rem, off ->
+                viewModel.updateScheduleEvent(
+                    editingEvt.copy(
+                        title = title,
+                        description = desc,
+                        startTime = start,
+                        endTime = end,
+                        location = loc,
+                        category = cat,
+                        reminderEnabled = rem,
+                        reminderOffsetMinutes = off
+                    )
+                )
+                eventToEditFromHome = null
+                coroutineScope.launch {
+                    snackbarHostState.showSnackbar("Schedule \"$title\" updated!")
+                }
+            }
+        )
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -302,33 +352,27 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                         "Evening" -> Icons.Default.WbTwilight
                         else -> Icons.Default.NightsStay
                     }
-                    Column(
+                    Row(
                         modifier = Modifier
-                            .clickable { navController.navigate("profile") }
-                            .testTag("home_top_left_greeting")
+                            .fillMaxWidth()
+                            .padding(end = 4.dp)
+                            .testTag("home_top_left_greeting"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = periodIcon,
-                                contentDescription = greetingSnapshot.periodLabel,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                "$greeting, $userName",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                        }
-                        Text(
-                            todayDateFormatted,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            fontWeight = FontWeight.Medium
+                        Icon(
+                            imageVector = periodIcon,
+                            contentDescription = greetingSnapshot.periodLabel,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        AutoSizeSingleLineText(
+                            text = greeting,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            minFontSizeSp = 11f,
+                            modifier = Modifier.weight(1f, fill = false)
                         )
                     }
                 },
@@ -373,13 +417,13 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                     IconButton(
                         onClick = { navController.navigate("profile") },
                         modifier = Modifier
-                            .padding(end = 4.dp)
+                            .padding(end = 2.dp)
                             .minimumInteractiveComponentSize()
                             .testTag("home_profile_avatar_btn")
                     ) {
                         Box(
                             modifier = Modifier
-                                .size(38.dp)
+                                .size(34.dp)
                                 .clip(CircleShape)
                                 .background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
@@ -387,6 +431,7 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                             val initial = if (userName.isNotBlank()) userName.first().uppercase() else "ક"
                             Text(
                                 initial,
+                                style = MaterialTheme.typography.labelLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                             )
@@ -413,9 +458,12 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                 )
             }
 
-            // 0b. AI Assistant Quick Helpers Banner (if enabled)
+            // 0b. AI Assistant Quick Data Entry & Helpers Banner (if enabled)
             if ("ai_assistant" in enabledModules) {
                 item {
+                    var quickAiInput by remember { mutableStateOf("") }
+                    var quickAiFeedback by remember { mutableStateOf<String?>(null) }
+
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -437,7 +485,8 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.weight(1f)
                                 ) {
                                     Icon(
                                         Icons.Default.AutoAwesome,
@@ -446,21 +495,101 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                                     )
                                     Column {
                                         Text(
-                                            "Gemini AI Helpers",
+                                            "Gemini AI Fast Data Entry",
                                             style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.ExtraBold
+                                            fontWeight = FontWeight.ExtraBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                         Text(
-                                            "Smart Entry • Receipt Scan • Ask Data • Insights",
+                                            "Add Expense, Income, Udhaar, Task, Habit or Note instantly",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
                                         )
                                     }
                                 }
                                 TextButton(onClick = { navController.navigate("ai_assistant") }) {
-                                    Text("Open AI Hub", fontWeight = FontWeight.Bold)
+                                    Text("AI Hub", fontWeight = FontWeight.Bold, maxLines = 1)
                                 }
                             }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                OutlinedTextField(
+                                    value = quickAiInput,
+                                    onValueChange = {
+                                        quickAiInput = it
+                                        quickAiFeedback = null
+                                    },
+                                    placeholder = {
+                                        Text(
+                                            "e.g. chai 20 cash, task pay bill, habit walk",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
+                                    singleLine = true,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("home_quick_ai_input"),
+                                    shape = RoundedCornerShape(12.dp)
+                                )
+                                Button(
+                                    onClick = {
+                                        if (quickAiInput.isNotBlank()) {
+                                            val toParse = quickAiInput
+                                            viewModel.quickSaveSmartEntryWithAi(toParse) { count, msg ->
+                                                quickAiFeedback = msg
+                                                if (count > 0) {
+                                                    quickAiInput = ""
+                                                }
+                                            }
+                                        }
+                                    },
+                                    enabled = quickAiInput.isNotBlank(),
+                                    shape = RoundedCornerShape(12.dp),
+                                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+                                    modifier = Modifier.testTag("home_quick_ai_add_btn")
+                                ) {
+                                    Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(Modifier.width(4.dp))
+                                    Text("Add", fontWeight = FontWeight.Bold, maxLines = 1)
+                                }
+                            }
+
+                            if (quickAiFeedback != null) {
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.CheckCircle,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = quickAiFeedback ?: "",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                                        )
+                                    }
+                                }
+                            }
+
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -492,6 +621,122 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                                     modifier = Modifier.testTag("home_ai_insights_chip")
                                 )
                             }
+                        }
+                    }
+                }
+            }
+
+            // 0c. Daily Life & Pro Toolkit Quick Hub (Meditation Countdown, Vehicle Fuel Mileage, Safe Spend, Grocery, EMI & WhatsApp)
+            item {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("home_daily_toolkit_card"),
+                    shape = RoundedCornerShape(18.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.SelfImprovement,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Column {
+                                    Text(
+                                        "Daily Life & Pro Toolkit",
+                                        style = MaterialTheme.typography.titleSmall,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        "Live Meditation Timer • Vehicle Fuel Mileage • Safe Spend • Grocery • EMI",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            }
+                            TextButton(onClick = { navController.navigate("daily_toolkit") }) {
+                                Text("Open All", fontWeight = FontWeight.Bold, maxLines = 1)
+                            }
+                        }
+
+                        // Highlighted Favorites Row: Meditation Countdown & Vehicle Fuel Mileage
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { navController.navigate("daily_toolkit?tab=0") },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("home_toolkit_meditation_btn"),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp)
+                            ) {
+                                Icon(Icons.Default.SelfImprovement, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Meditation Timer", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                            FilledTonalButton(
+                                onClick = { navController.navigate("daily_toolkit?tab=1") },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("home_toolkit_fuel_btn"),
+                                shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 10.dp)
+                            ) {
+                                Icon(Icons.Default.LocalGasStation, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(6.dp))
+                                Text("Vehicle Fuel", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+
+                        // Secondary Pro Tools Strip
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            AssistChip(
+                                onClick = { navController.navigate("daily_toolkit?tab=2") },
+                                leadingIcon = { Icon(Icons.Default.Shield, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                label = { Text("Safe-to-Spend & Subs") }
+                            )
+                            AssistChip(
+                                onClick = { navController.navigate("daily_toolkit?tab=3") },
+                                leadingIcon = { Icon(Icons.Default.ShoppingCart, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                label = { Text("Smart Grocery List") }
+                            )
+                            AssistChip(
+                                onClick = { navController.navigate("daily_toolkit?tab=4") },
+                                leadingIcon = { Icon(Icons.Default.Calculate, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                label = { Text("EMI & WhatsApp Reminder") }
+                            )
+                            AssistChip(
+                                onClick = { navController.navigate("daily_toolkit?tab=5") },
+                                leadingIcon = { Icon(Icons.Default.Verified, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                                label = { Text("Daily Wrap-Up & Passbook") }
+                            )
                         }
                     }
                 }
@@ -615,11 +860,12 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
 
                         Spacer(Modifier.height(8.dp))
 
-                        Text(
-                            formatMoney(totalBalance),
+                        AutoSizeSingleLineText(
+                            text = formatMoney(totalBalance),
                             style = MaterialTheme.typography.displaySmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            minFontSizeSp = 18f
                         )
 
                         Spacer(Modifier.height(16.dp))
@@ -638,22 +884,33 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                                     .clickable { navController.navigate("accounts") }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(12.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(34.dp)
+                                            .size(32.dp)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(Color(0xFFE8F5E9)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.Payments, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.Payments, contentDescription = null, tint = Color(0xFF2E7D32), modifier = Modifier.size(16.dp))
                                     }
-                                    Column {
-                                        Text("Cash in Hand", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(formatMoney(cashBalance), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        AutoSizeSingleLineText(
+                                            text = "Cash in Hand",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            minFontSizeSp = 9f
+                                        )
+                                        AutoSizeSingleLineText(
+                                            text = formatMoney(cashBalance),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            minFontSizeSp = 10f
+                                        )
                                     }
                                 }
                             }
@@ -667,22 +924,33 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                                     .clickable { navController.navigate("accounts") }
                             ) {
                                 Row(
-                                    modifier = Modifier.padding(12.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(34.dp)
+                                            .size(32.dp)
                                             .clip(RoundedCornerShape(10.dp))
                                             .background(Color(0xFFE3F2FD)),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                        Icon(Icons.Default.AccountBalance, contentDescription = null, tint = Color(0xFF1565C0), modifier = Modifier.size(18.dp))
+                                        Icon(Icons.Default.AccountBalance, contentDescription = null, tint = Color(0xFF1565C0), modifier = Modifier.size(16.dp))
                                     }
-                                    Column {
-                                        Text("Bank Balance", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        Text(formatMoney(bankBalance), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        AutoSizeSingleLineText(
+                                            text = "Bank Balance",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            minFontSizeSp = 9f
+                                        )
+                                        AutoSizeSingleLineText(
+                                            text = formatMoney(bankBalance),
+                                            style = MaterialTheme.typography.labelLarge,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            minFontSizeSp = 10f
+                                        )
                                     }
                                 }
                             }
@@ -881,27 +1149,27 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             // Today's Spend
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Today's Spend", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                AutoSizeSingleLineText("Today's Spend", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, minFontSizeSp = 9f)
                                 Spacer(Modifier.height(4.dp))
-                                Text(formatMoney(todaySpend), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                AutoSizeSingleLineText(formatMoney(todaySpend), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error, minFontSizeSp = 11f)
                             }
 
                             // This Month Income
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("Month Income", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                AutoSizeSingleLineText("Month Income", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, minFontSizeSp = 9f)
                                 Spacer(Modifier.height(4.dp))
-                                Text(formatMoney(monthIncome), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32))
+                                AutoSizeSingleLineText(formatMoney(monthIncome), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = Color(0xFF2E7D32), minFontSizeSp = 11f)
                             }
 
                             // This Month Expense
                             Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.End) {
-                                Text("Month Expense", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                AutoSizeSingleLineText("Month Expense", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, minFontSizeSp = 9f)
                                 Spacer(Modifier.height(4.dp))
-                                Text(formatMoney(monthExpense), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error)
+                                AutoSizeSingleLineText(formatMoney(monthExpense), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error, minFontSizeSp = 11f)
                             }
                         }
 
@@ -940,6 +1208,8 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                             val nextStatus = if (task.status == "DONE") "TODO" else "DONE"
                             viewModel.toggleTaskStatus(task, nextStatus)
                         },
+                        onEditLiveTask = { task -> taskToEditFromHome = task },
+                        onEditLiveEvent = { evt -> eventToEditFromHome = evt },
                         onQuickAddStarterTask = { title, repeatFreq ->
                             viewModel.addTask(
                                 title = title,
@@ -1143,38 +1413,64 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                                     )
                                 }
 
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         if (isTransfer || isUdhaar) transaction.note.ifBlank { transaction.category } else transaction.category,
                                         fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.bodyMedium
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
                                     Text(
                                         "${transaction.account} • ${FormatUtils.formatDate(transaction.timestamp)}",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
                                 }
                             }
 
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    "$sign${formatMoney(transaction.amount)}",
-                                    fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = amountColor
-                                )
-                                if (transaction.paymentMethod.isNotBlank() && transaction.paymentMethod != "Transfer") {
-                                    Surface(
-                                        shape = RoundedCornerShape(6.dp),
-                                        color = MaterialTheme.colorScheme.surfaceVariant
-                                    ) {
-                                        Text(
-                                            transaction.paymentMethod,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Column(horizontalAlignment = Alignment.End) {
+                                    AutoSizeSingleLineText(
+                                        text = "$sign${formatMoney(transaction.amount)}",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = amountColor,
+                                        minFontSizeSp = 11f
+                                    )
+                                    if (transaction.paymentMethod.isNotBlank() && transaction.paymentMethod != "Transfer") {
+                                        Surface(
+                                            shape = RoundedCornerShape(6.dp),
+                                            color = MaterialTheme.colorScheme.surfaceVariant
+                                        ) {
+                                            Text(
+                                                transaction.paymentMethod,
+                                                style = MaterialTheme.typography.labelSmall,
+                                                maxLines = 1,
+                                                softWrap = false,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                            )
+                                        }
                                     }
+                                }
+
+                                IconButton(
+                                    onClick = { navController.navigate("add?id=${transaction.id}") },
+                                    modifier = Modifier
+                                        .size(34.dp)
+                                        .testTag("home_edit_tx_${transaction.id}")
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit Transaction",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
                                 }
                             }
                         }

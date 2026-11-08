@@ -7,6 +7,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -60,19 +61,81 @@ fun AddUdhaarEntryDialog(
 
     val scrollState = rememberScrollState()
 
+    fun submitUdhaarEntry() {
+        val amount = amountText.toDoubleOrNull()
+        if (amount == null || amount <= 0) {
+            amountError = "Enter a valid amount > 0"
+            return
+        }
+        val targetPersonId = preselectedPerson?.id ?: selectedPersonId
+        if (targetPersonId <= 0) {
+            personError = true
+            return
+        }
+        val dateParsed = FormatUtils.parseDate(dateText)
+        if (dateParsed == null) {
+            dateError = "Invalid date format. Use DD/MM/YYYY"
+            return
+        }
+
+        val dueDateParsed = if (dueDateText.isNotBlank()) {
+            FormatUtils.parseDate(dueDateText)
+        } else null
+
+        onSave(
+            targetPersonId,
+            entryType,
+            amount,
+            selectedAccount,
+            dateParsed,
+            dueDateParsed,
+            note.trim()
+        )
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         shape = RoundedCornerShape(24.dp),
         title = {
-            Text(
-                if (entryType == "GAVE") "I Gave Money (Lent)" else "I Took Money (Borrowed)",
-                fontWeight = FontWeight.Bold
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    AutoSizeSingleLineText(
+                        text = if (entryType == "GAVE") "I Gave Money" else "I Took Money",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = { submitUdhaarEntry() },
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = "Save Entry", modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Save", fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            }
         },
         text = {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = 460.dp)
                     .verticalScroll(scrollState)
                     .padding(vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
@@ -86,10 +149,10 @@ fun AddUdhaarEntryDialog(
                         selected = entryType == "GAVE",
                         onClick = { entryType = "GAVE" },
                         leadingIcon = {
-                            Icon(Icons.Default.ArrowOutward, contentDescription = null, tint = if (entryType == "GAVE") Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Default.ArrowOutward, contentDescription = null, tint = if (entryType == "GAVE") Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         },
                         label = {
-                            Text("I Gave (Lent)", fontWeight = FontWeight.Bold)
+                            Text("I Gave (Lent)", fontWeight = FontWeight.Bold, maxLines = 1)
                         },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = Color(0xFFE8F5E9),
@@ -104,10 +167,10 @@ fun AddUdhaarEntryDialog(
                         selected = entryType == "TOOK",
                         onClick = { entryType = "TOOK" },
                         leadingIcon = {
-                            Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = if (entryType == "TOOK") Color(0xFFC62828) else MaterialTheme.colorScheme.onSurfaceVariant)
+                            Icon(Icons.Default.ArrowDownward, contentDescription = null, tint = if (entryType == "TOOK") Color(0xFFC62828) else MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         },
                         label = {
-                            Text("I Took (Borrowed)", fontWeight = FontWeight.Bold)
+                            Text("I Took", fontWeight = FontWeight.Bold, maxLines = 1)
                         },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = Color(0xFFFFEBEE),
@@ -345,48 +408,22 @@ fun AddUdhaarEntryDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
-                    val amount = amountText.toDoubleOrNull()
-                    if (amount == null || amount <= 0) {
-                        amountError = "Enter a valid amount > 0"
-                        return@Button
-                    }
-                    val targetPersonId = preselectedPerson?.id ?: selectedPersonId
-                    if (targetPersonId <= 0) {
-                        personError = true
-                        return@Button
-                    }
-                    val dateParsed = FormatUtils.parseDate(dateText)
-                    if (dateParsed == null) {
-                        dateError = "Invalid date format. Use DD/MM/YYYY"
-                        return@Button
-                    }
-
-                    val dueDateParsed = if (dueDateText.isNotBlank()) {
-                        FormatUtils.parseDate(dueDateText)
-                    } else null
-
-                    onSave(
-                        targetPersonId,
-                        entryType,
-                        amount,
-                        selectedAccount,
-                        dateParsed,
-                        dueDateParsed,
-                        note.trim()
-                    )
-                },
+                onClick = { submitUdhaarEntry() },
                 modifier = Modifier.testTag("save_entry_button")
             ) {
-                Text("Save Entry")
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Save Entry", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(
+            OutlinedButton(
                 onClick = onDismiss,
                 modifier = Modifier.testTag("cancel_entry_button")
             ) {
-                Text("Cancel")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Back")
             }
         }
     )

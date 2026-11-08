@@ -1,1 +1,0 @@
-sed -i 's/Switch(checked = prefs.getBoolean("daily_reminder", false), onCheckedChange = { checked -> prefs.edit().putBoolean("daily_reminder", checked).apply(); if (checked) NotificationHelper.scheduleDailyReminder(context) })/Icon(Icons.Default.ChevronRight, contentDescription = null)/g' app/src/main/java/com/example/ui/screens/SettingsScreen.kt

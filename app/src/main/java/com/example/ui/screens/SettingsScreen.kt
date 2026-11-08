@@ -485,13 +485,55 @@ fun SettingsScreen(navController: NavController, viewModel: FinanceViewModel) {
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
 
                         ListItem(
+                            colors = ListItemDefaults.colors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
+                            ),
+                            modifier = Modifier
+                                .clickable { navController.navigate("daily_toolkit?tab=0") }
+                                .testTag("more_item_daily_toolkit"),
+                            leadingContent = {
+                                Icon(
+                                    Icons.Default.SelfImprovement,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            headlineContent = {
+                                Text(
+                                    "Daily Life & Pro Toolkit (Free)",
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            },
+                            supportingContent = {
+                                Text("Live Meditation Timer • Vehicle Fuel Mileage • Safe-to-Spend • Smart Grocery • EMI & WhatsApp")
+                            },
+                            trailingContent = {
+                                Icon(Icons.Default.ChevronRight, contentDescription = null)
+                            }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                        ListItem(
+                            colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
+                            modifier = Modifier
+                                .clickable { navController.navigate("daily_toolkit?tab=1") }
+                                .testTag("more_item_vehicle_fuel"),
+                            leadingContent = { Icon(Icons.Default.LocalGasStation, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+                            headlineContent = { Text("Vehicle Fuel & Mileage Tracker", fontWeight = FontWeight.SemiBold) },
+                            supportingContent = { Text("Track odometer km, km/L mileage, ₹/km cost & next service alert") },
+                            trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
+                        )
+                        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+
+                        ListItem(
                             colors = ListItemDefaults.colors(containerColor = MaterialTheme.colorScheme.surface),
                             modifier = Modifier
                                 .clickable { navController.navigate("profile") }
                                 .testTag("more_item_profile_permissions"),
                             leadingContent = { Icon(Icons.Default.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
-                            headlineContent = { Text("Profile (કુતુબ), Time Greeting & App Permissions", fontWeight = FontWeight.SemiBold) },
-                            supportingContent = { Text("Edit Gujarati/English name, Morning/Afternoon/Evening/Night clock & permissions") },
+                            headlineContent = { Text("My Profile (કુતુબ)", fontWeight = FontWeight.SemiBold) },
+                            supportingContent = { Text("Edit your name and notification reminders") },
                             trailingContent = { Icon(Icons.Default.ChevronRight, contentDescription = null) }
                         )
                         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))

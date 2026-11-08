@@ -30,6 +30,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun DailyTasksScheduleCard(
     onAddTaskClick: () -> Unit,
@@ -39,6 +40,8 @@ fun DailyTasksScheduleCard(
     liveEvents: List<ScheduleEvent>? = null,
     currentStreak: Int = 0,
     onToggleLiveTask: ((TaskItem) -> Unit)? = null,
+    onEditLiveTask: ((TaskItem) -> Unit)? = null,
+    onEditLiveEvent: ((ScheduleEvent) -> Unit)? = null,
     onQuickAddStarterTask: ((title: String, repeatFrequency: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -111,23 +114,23 @@ fun DailyTasksScheduleCard(
                     }
 
                     Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            "Today's Tasks & Schedule",
+                        AutoSizeSingleLineText(
+                            text = "Today's Tasks & Schedule",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            fontWeight = FontWeight.Bold
                         )
                         val total = if (liveTasks != null) liveTasks.size else fallbackTasks.size
                         val done = if (liveTasks != null) liveTasks.count { it.status == "DONE" } else fallbackDoneMap.values.count { it }
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
                                 "$done of $total completed",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                softWrap = false
                             )
                             Surface(
                                 shape = RoundedCornerShape(8.dp),
@@ -149,7 +152,9 @@ fun DailyTasksScheduleCard(
                                         "$currentStreak Day Streak",
                                         style = MaterialTheme.typography.labelSmall,
                                         fontWeight = FontWeight.Bold,
-                                        color = if (currentStreak > 0) Color(0xFFE65100) else MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = if (currentStreak > 0) Color(0xFFE65100) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        softWrap = false
                                     )
                                 }
                             }
@@ -173,11 +178,15 @@ fun DailyTasksScheduleCard(
                         .height(38.dp)
                         .testTag("add_task_header_button"),
                     shape = RoundedCornerShape(10.dp),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                 ) {
-                    Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.AddTask, contentDescription = null, modifier = Modifier.size(15.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Add Task", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                    AutoSizeSingleLineText(
+                        text = "Add Task",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
 
                 if (onAddEventClick != null) {
@@ -188,11 +197,15 @@ fun DailyTasksScheduleCard(
                             .height(38.dp)
                             .testTag("add_event_header_button"),
                         shape = RoundedCornerShape(10.dp),
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                     ) {
-                        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(15.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Schedule", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                        AutoSizeSingleLineText(
+                            text = "Schedule",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold
+                        )
                     }
                 }
 
@@ -201,9 +214,15 @@ fun DailyTasksScheduleCard(
                     modifier = Modifier
                         .height(38.dp)
                         .testTag("view_all_tasks_button"),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp)
                 ) {
-                    Text("View All", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text(
+                        "View All",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        softWrap = false
+                    )
                     Icon(Icons.Default.ChevronRight, contentDescription = null, modifier = Modifier.size(16.dp))
                 }
             }
@@ -228,7 +247,7 @@ fun DailyTasksScheduleCard(
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                    .padding(horizontal = 10.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
@@ -253,15 +272,17 @@ fun DailyTasksScheduleCard(
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
-                                        Row(
+                                        FlowRow(
                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
                                             if (task.dueDateTime != null) {
                                                 Text(
                                                     "🕒 ${timeFmt.format(Date(task.dueDateTime))}",
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    softWrap = false
                                                 )
                                             }
                                             if (task.repeatFrequency != "NONE") {
@@ -269,7 +290,9 @@ fun DailyTasksScheduleCard(
                                                     "🔁 ${task.repeatFrequency.lowercase().replaceFirstChar { it.uppercase() }}",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.primary,
-                                                    fontWeight = FontWeight.SemiBold
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1,
+                                                    softWrap = false
                                                 )
                                             }
                                             if (task.isLinkedToMoney && task.linkedAmount != null) {
@@ -277,24 +300,48 @@ fun DailyTasksScheduleCard(
                                                     "💰 ${FormatUtils.formatInr(task.linkedAmount)}",
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = Color(0xFFE65100),
-                                                    fontWeight = FontWeight.Bold
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1,
+                                                    softWrap = false
                                                 )
                                             }
                                         }
                                     }
                                 }
 
-                                Surface(
-                                    shape = RoundedCornerShape(6.dp),
-                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    Text(
-                                        task.priority,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                    )
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                    ) {
+                                        Text(
+                                            task.priority,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary,
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    if (onEditLiveTask != null) {
+                                        IconButton(
+                                            onClick = { onEditLiveTask(task) },
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .testTag("home_edit_task_${task.id}")
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Edit,
+                                                contentDescription = "Edit Task",
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -411,13 +458,44 @@ fun DailyTasksScheduleCard(
                     val timeFormat = SimpleDateFormat("dd MMM • hh:mm a", Locale.getDefault())
                     eventsToShow.forEach { evt ->
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(if (onEditLiveEvent != null) Modifier.clickable { onEditLiveEvent(evt) } else Modifier),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
-                            Text(evt.title, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Medium, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(timeFormat.format(Date(evt.startTime)), style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text(
+                                evt.title,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                timeFormat.format(Date(evt.startTime)),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                softWrap = false
+                            )
+                            if (onEditLiveEvent != null) {
+                                IconButton(
+                                    onClick = { onEditLiveEvent(evt) },
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .testTag("home_edit_event_${evt.id}")
+                                ) {
+                                    Icon(
+                                        Icons.Default.Edit,
+                                        contentDescription = "Edit Schedule Event",
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(15.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

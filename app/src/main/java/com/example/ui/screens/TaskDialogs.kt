@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -28,8 +29,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.data.Account
 import com.example.data.Category
+import com.example.data.ScheduleEvent
 import com.example.data.Subtask
+import com.example.data.TaskItem
 import com.example.ui.NotificationHelper
+import com.example.ui.components.AutoSizeSingleLineText
+import com.example.utils.TaskUtils
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -42,6 +47,7 @@ fun AddTaskDialog(
     accounts: List<Account>,
     categories: List<Category>,
     initialDateMillis: Long? = null,
+    existingTask: TaskItem? = null,
     onSaveTask: (
         title: String,
         description: String,
@@ -58,41 +64,56 @@ fun AddTaskDialog(
     ) -> Unit
 ) {
     val context = LocalContext.current
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var priority by remember { mutableStateOf("MEDIUM") }
-    var category by remember { mutableStateOf("Personal") }
-    var repeatFrequency by remember { mutableStateOf("NONE") }
+    var title by remember(existingTask) { mutableStateOf(existingTask?.title ?: "") }
+    var description by remember(existingTask) { mutableStateOf(existingTask?.description ?: "") }
+    var priority by remember(existingTask) { mutableStateOf(existingTask?.priority ?: "MEDIUM") }
+    var category by remember(existingTask) { mutableStateOf(existingTask?.category ?: "Personal") }
+    var repeatFrequency by remember(existingTask) { mutableStateOf(existingTask?.repeatFrequency ?: "NONE") }
 
-    // Calendar & Clock state (defaults to Today at 6:00 PM)
-    val initialCal = remember(initialDateMillis) {
+    // Calendar & Clock state (defaults to existingTask dueDateTime or Today at 6:00 PM)
+    val initialCal = remember(initialDateMillis, existingTask) {
         Calendar.getInstance().apply {
-            if (initialDateMillis != null && initialDateMillis > 0L) {
-                timeInMillis = initialDateMillis
+            val baseMillis = existingTask?.dueDateTime ?: initialDateMillis
+            if (baseMillis != null && baseMillis > 0L) {
+                timeInMillis = baseMillis
             }
         }
     }
-    var selectedDateMillis by remember { mutableLongStateOf(initialCal.timeInMillis) }
-    var selectedHour by remember { mutableIntStateOf(18) }
-    var selectedMinute by remember { mutableIntStateOf(0) }
+    var selectedDateMillis by remember(existingTask) { mutableLongStateOf(initialCal.timeInMillis) }
+    var selectedHour by remember(existingTask) {
+        mutableIntStateOf(if (existingTask?.dueDateTime != null) initialCal.get(Calendar.HOUR_OF_DAY) else 18)
+    }
+    var selectedMinute by remember(existingTask) {
+        mutableIntStateOf(if (existingTask?.dueDateTime != null) initialCal.get(Calendar.MINUTE) else 0)
+    }
 
     var showDatePickerDialog by remember { mutableStateOf(false) }
     var showTimePickerDialog by remember { mutableStateOf(false) }
 
     // Subtasks
-    var subtasks by remember { mutableStateOf<List<Subtask>>(emptyList()) }
+    var subtasks by remember(existingTask) {
+        mutableStateOf(
+            if (existingTask != null) TaskUtils.parseSubtasks(existingTask.subtasksJson) else emptyList()
+        )
+    }
     var newSubtaskText by remember { mutableStateOf("") }
 
     // Money link
-    var isLinkedToMoney by remember { mutableStateOf(false) }
-    var linkedAmountStr by remember { mutableStateOf("") }
-    var linkedAccount by remember {
-        mutableStateOf(accounts.firstOrNull()?.name ?: "Bank Account")
+    var isLinkedToMoney by remember(existingTask) { mutableStateOf(existingTask?.isLinkedToMoney ?: false) }
+    var linkedAmountStr by remember(existingTask) {
+        mutableStateOf(
+            existingTask?.linkedAmount?.let { amt ->
+                if (amt % 1.0 == 0.0) amt.toLong().toString() else amt.toString()
+            } ?: ""
+        )
     }
-    var linkedCategory by remember { mutableStateOf("Bills") }
+    var linkedAccount by remember(existingTask, accounts) {
+        mutableStateOf(existingTask?.linkedAccount ?: accounts.firstOrNull()?.name ?: "Bank Account")
+    }
+    var linkedCategory by remember(existingTask) { mutableStateOf(existingTask?.linkedCategory ?: "Bills") }
 
     // Reminder & Notification Permission
-    var reminderEnabled by remember { mutableStateOf(false) }
+    var reminderEnabled by remember(existingTask) { mutableStateOf(existingTask?.reminderEnabled ?: false) }
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -238,7 +259,26 @@ fun AddTaskDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("New Task", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("task_dialog_back_btn")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    AutoSizeSingleLineText(
+                        text = if (existingTask != null) "Edit Task" else "New Task",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = { submitTask() },
                     shape = RoundedCornerShape(10.dp),
@@ -247,7 +287,7 @@ fun AddTaskDialog(
                 ) {
                     Icon(Icons.Default.Check, contentDescription = "Save Task", modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Save", fontWeight = FontWeight.Bold)
+                    Text(if (existingTask != null) "Update" else "Save", fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
         },
@@ -255,7 +295,7 @@ fun AddTaskDialog(
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = 480.dp),
+                    .heightIn(max = 460.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
@@ -265,14 +305,15 @@ fun AddTaskDialog(
                         label = { Text("Task Title *") },
                         placeholder = { Text("e.g. Pay electricity bill, Buy groceries") },
                         modifier = Modifier.fillMaxWidth().testTag("task_title_input"),
-                        singleLine = true
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp)
                     )
                 }
 
-                // Calendar & Clock Interactive Pickers (No manual typing needed!)
+                // Calendar & Clock Interactive Pickers
                 item {
                     Text(
-                        "Select Date & Time (Calendar & Clock)",
+                        "Date & Time",
                         fontWeight = FontWeight.SemiBold,
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.primary
@@ -295,19 +336,20 @@ fun AddTaskDialog(
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(
                                     Icons.Default.CalendarMonth,
                                     contentDescription = "Open Calendar",
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Column {
                                     Text(
-                                        "Date (Tap Calendar)",
+                                        "Date",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
                                     )
                                     Text(
                                         formattedDateLabel,
@@ -333,19 +375,20 @@ fun AddTaskDialog(
                             Row(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Icon(
                                     Icons.Default.AccessTime,
                                     contentDescription = "Open Clock",
                                     tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(18.dp)
                                 )
                                 Column {
                                     Text(
-                                        "Time (Tap Clock)",
+                                        "Time",
                                         style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
                                     )
                                     Text(
                                         formattedTimeLabel,
@@ -630,11 +673,15 @@ fun AddTaskDialog(
             ) {
                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Save Task", fontWeight = FontWeight.Bold)
+                Text(if (existingTask != null) "Update Task" else "Save Task", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            OutlinedButton(onClick = onDismiss) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Back")
+            }
         }
     )
 }
@@ -644,6 +691,7 @@ fun AddTaskDialog(
 fun AddScheduleEventDialog(
     onDismiss: () -> Unit,
     initialDateMillis: Long? = null,
+    existingEvent: ScheduleEvent? = null,
     onSaveEvent: (
         title: String,
         description: String,
@@ -656,26 +704,42 @@ fun AddScheduleEventDialog(
     ) -> Unit
 ) {
     val context = LocalContext.current
-    var title by remember { mutableStateOf("") }
-    var description by remember { mutableStateOf("") }
-    var location by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("Meeting") }
+    var title by remember(existingEvent) { mutableStateOf(existingEvent?.title ?: "") }
+    var description by remember(existingEvent) { mutableStateOf(existingEvent?.description ?: "") }
+    var location by remember(existingEvent) { mutableStateOf(existingEvent?.location ?: "") }
+    var category by remember(existingEvent) { mutableStateOf(existingEvent?.category ?: "Meeting") }
     var repeatSchedule by remember { mutableStateOf("NONE") } // NONE, DAILY, WEEKLY
-    var reminderEnabled by remember { mutableStateOf(true) }
-    var reminderOffsetMinutes by remember { mutableIntStateOf(15) }
+    var reminderEnabled by remember(existingEvent) { mutableStateOf(existingEvent?.reminderEnabled ?: true) }
+    var reminderOffsetMinutes by remember(existingEvent) { mutableIntStateOf(existingEvent?.reminderOffsetMinutes ?: 15) }
 
-    val initialCal = remember(initialDateMillis) {
+    val initialCal = remember(initialDateMillis, existingEvent) {
         Calendar.getInstance().apply {
-            if (initialDateMillis != null && initialDateMillis > 0L) {
-                timeInMillis = initialDateMillis
+            val baseMillis = existingEvent?.startTime ?: initialDateMillis
+            if (baseMillis != null && baseMillis > 0L) {
+                timeInMillis = baseMillis
             }
         }
     }
-    var selectedDateMillis by remember { mutableLongStateOf(initialCal.timeInMillis) }
-    var startHour by remember { mutableIntStateOf(10) }
-    var startMinute by remember { mutableIntStateOf(0) }
-    var endHour by remember { mutableIntStateOf(11) }
-    var endMinute by remember { mutableIntStateOf(0) }
+    val initialEndCal = remember(existingEvent) {
+        Calendar.getInstance().apply {
+            if (existingEvent != null && existingEvent.endTime > 0L) {
+                timeInMillis = existingEvent.endTime
+            }
+        }
+    }
+    var selectedDateMillis by remember(existingEvent) { mutableLongStateOf(initialCal.timeInMillis) }
+    var startHour by remember(existingEvent) {
+        mutableIntStateOf(if (existingEvent != null) initialCal.get(Calendar.HOUR_OF_DAY) else 10)
+    }
+    var startMinute by remember(existingEvent) {
+        mutableIntStateOf(if (existingEvent != null) initialCal.get(Calendar.MINUTE) else 0)
+    }
+    var endHour by remember(existingEvent) {
+        mutableIntStateOf(if (existingEvent != null) initialEndCal.get(Calendar.HOUR_OF_DAY) else 11)
+    }
+    var endMinute by remember(existingEvent) {
+        mutableIntStateOf(if (existingEvent != null) initialEndCal.get(Calendar.MINUTE) else 0)
+    }
 
     var showDatePickerDialog by remember { mutableStateOf(false) }
     var showStartTimePickerDialog by remember { mutableStateOf(false) }
@@ -711,7 +775,7 @@ fun AddScheduleEventDialog(
         val finalTitle = title.trim().ifBlank { "Scheduled Event" }
         val baseCal = Calendar.getInstance().apply { timeInMillis = selectedDateMillis }
 
-        val occurrences = when (repeatSchedule) {
+        val occurrences = if (existingEvent != null) 1 else when (repeatSchedule) {
             "DAILY" -> 7   // Creates daily schedule for the next 7 days
             "WEEKLY" -> 4  // Creates weekly schedule for the next 4 weeks
             else -> 1
@@ -845,7 +909,26 @@ fun AddScheduleEventDialog(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("New Schedule Event", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .testTag("event_dialog_back_btn")
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    AutoSizeSingleLineText(
+                        text = if (existingEvent != null) "Edit Event" else "New Event",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                Spacer(Modifier.width(8.dp))
                 Button(
                     onClick = { submitEvent() },
                     shape = RoundedCornerShape(10.dp),
@@ -854,7 +937,7 @@ fun AddScheduleEventDialog(
                 ) {
                     Icon(Icons.Default.Check, contentDescription = "Save Event", modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Save", fontWeight = FontWeight.Bold)
+                    Text(if (existingEvent != null) "Update" else "Save", fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
         },
@@ -862,6 +945,7 @@ fun AddScheduleEventDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(max = 460.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
@@ -1049,11 +1133,15 @@ fun AddScheduleEventDialog(
             ) {
                 Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
-                Text("Save Event", fontWeight = FontWeight.Bold)
+                Text(if (existingEvent != null) "Update Event" else "Save Event", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            OutlinedButton(onClick = onDismiss) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Back")
+            }
         }
     )
 }

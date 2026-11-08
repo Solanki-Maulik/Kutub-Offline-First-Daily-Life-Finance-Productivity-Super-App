@@ -822,6 +822,7 @@ fun HistoryScreen(viewModel: FinanceViewModel, navController: NavController) {
                                 Card(
                                     modifier = Modifier
                                         .fillMaxWidth()
+                                        .clickable { navController.navigate("add?id=${transaction.id}") }
                                         .testTag("transaction_item_${transaction.id}"),
                                     shape = RoundedCornerShape(18.dp),
                                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -857,34 +858,43 @@ fun HistoryScreen(viewModel: FinanceViewModel, navController: NavController) {
                                                     )
                                                 }
 
-                                                Column {
+                                                Column(modifier = Modifier.weight(1f)) {
                                                     Text(
                                                         if (isTransfer || isUdhaar) transaction.note.ifBlank { transaction.category } else transaction.category,
                                                         fontWeight = FontWeight.Bold,
-                                                        style = MaterialTheme.typography.titleMedium
+                                                        style = MaterialTheme.typography.titleMedium,
+                                                        maxLines = 1,
+                                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                     )
                                                     if (transaction.subcategory.isNotBlank()) {
                                                         Text(
                                                             transaction.subcategory,
                                                             style = MaterialTheme.typography.bodySmall,
                                                             color = MaterialTheme.colorScheme.primary,
-                                                            fontWeight = FontWeight.Medium
+                                                            fontWeight = FontWeight.Medium,
+                                                            maxLines = 1,
+                                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                         )
                                                     }
                                                     Text(
                                                         "${vItem.formattedTime} • ${transaction.account}${if (transaction.paymentMethod.isNotBlank()) " • ${transaction.paymentMethod}" else ""}",
                                                         style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 1,
+                                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                                     )
                                                 }
                                             }
 
+                                            Spacer(Modifier.width(8.dp))
+
                                             Column(horizontalAlignment = Alignment.End) {
-                                                Text(
-                                                    "$sign${FormatUtils.formatInr(transaction.amount)}",
+                                                com.example.ui.components.AutoSizeSingleLineText(
+                                                    text = "$sign${FormatUtils.formatInr(transaction.amount)}",
                                                     fontWeight = FontWeight.Bold,
                                                     style = MaterialTheme.typography.titleMedium,
-                                                    color = amountColor
+                                                    color = amountColor,
+                                                    minFontSizeSp = 11f
                                                 )
                                                 if (transaction.photoUri != null) {
                                                     Spacer(Modifier.height(4.dp))

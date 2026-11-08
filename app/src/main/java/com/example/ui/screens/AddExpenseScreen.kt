@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -34,6 +35,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.example.data.Transaction
+import com.example.ui.components.AutoSizeSingleLineText
 import com.example.ui.components.CategoryManagementDialog
 import com.example.utils.CategoryUtils
 import com.example.utils.FormatUtils
@@ -124,6 +126,12 @@ fun AddExpenseScreen(
                     else -> TransactionType.EXPENSE
                 }
                 selectedAccount = tx.account
+                if (tx.category == "Transfer" && tx.note.contains(" to ", ignoreCase = true)) {
+                    val parsedTo = tx.note.substringAfterLast(" to ").trim()
+                    if (parsedTo.isNotEmpty()) {
+                        toAccount = parsedTo
+                    }
+                }
                 paymentMethod = if (tx.paymentMethod.isNotBlank()) tx.paymentMethod else "UPI"
                 note = tx.note
                 tags = tx.tags
@@ -169,12 +177,28 @@ fun AddExpenseScreen(
 
     fun executeSave() {
         if (transactionType == TransactionType.TRANSFER) {
-            viewModel.addTransfer(
-                amount = pendingSaveAmount,
-                fromAccount = selectedAccount,
-                toAccount = toAccount,
-                timestamp = selectedTimestamp
-            )
+            if (transactionId != -1) {
+                viewModel.updateTransaction(
+                    id = transactionId,
+                    amount = pendingSaveAmount,
+                    isIncome = false,
+                    category = "Transfer",
+                    subcategory = "",
+                    account = selectedAccount,
+                    paymentMethod = "Transfer",
+                    note = "Transfer from $selectedAccount to $toAccount",
+                    tags = tags.trim(),
+                    photoUri = photoUri,
+                    timestamp = selectedTimestamp
+                )
+            } else {
+                viewModel.addTransfer(
+                    amount = pendingSaveAmount,
+                    fromAccount = selectedAccount,
+                    toAccount = toAccount,
+                    timestamp = selectedTimestamp
+                )
+            }
         } else {
             val isIncome = transactionType == TransactionType.INCOME
             if (transactionId != -1) {
@@ -414,15 +438,15 @@ fun AddExpenseScreen(
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
                 title = {
-                    Text(
-                        if (transactionId != -1) "Edit Transaction" else "Add Transaction",
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1
+                    AutoSizeSingleLineText(
+                        text = if (transactionId != -1) "Edit Transaction" else "Add Transaction",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack, modifier = Modifier.testTag("close_expense_button")) {
-                        Icon(Icons.Default.Close, contentDescription = "Close")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                     }
                 },
                 actions = {
@@ -448,11 +472,11 @@ fun AddExpenseScreen(
                     Button(
                         onClick = { validateAndProceed() },
                         enabled = !isSubmitting,
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
-                        shape = RoundedCornerShape(14.dp),
+                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier
                             .padding(end = 8.dp)
-                            .height(40.dp)
+                            .height(38.dp)
                             .testTag("top_save_expense_check_button")
                     ) {
                         Icon(
@@ -461,7 +485,7 @@ fun AddExpenseScreen(
                             modifier = Modifier.size(18.dp)
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text("Save", fontWeight = FontWeight.Bold)
+                        Text("Save", fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                 }
             )
@@ -486,24 +510,26 @@ fun AddExpenseScreen(
                         onClick = onBack,
                         modifier = Modifier
                             .height(48.dp)
-                            .weight(0.35f),
+                            .weight(0.38f),
                         shape = RoundedCornerShape(14.dp)
                     ) {
-                        Text("Cancel", fontWeight = FontWeight.SemiBold, maxLines = 1)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("Back", fontWeight = FontWeight.SemiBold, maxLines = 1)
                     }
                     Button(
                         onClick = { validateAndProceed() },
                         enabled = !isSubmitting,
                         modifier = Modifier
                             .height(48.dp)
-                            .weight(0.65f)
+                            .weight(0.62f)
                             .testTag("sticky_save_expense_button"),
                         shape = RoundedCornerShape(14.dp)
                     ) {
                         Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(
-                            if (transactionId != -1) "Save Changes" else "Save Transaction",
+                            if (transactionId != -1) "Save Changes" else "Save",
                             fontWeight = FontWeight.Bold,
                             maxLines = 1
                         )
@@ -619,7 +645,6 @@ fun AddExpenseScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(innerPadding)
-                    .imePadding()
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -766,7 +791,10 @@ fun AddExpenseScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
                             Icon(
                                 Icons.Default.CalendarToday,
                                 contentDescription = null,
@@ -779,10 +807,12 @@ fun AddExpenseScreen(
                                 Text(
                                     formattedDateTime(),
                                     style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.SemiBold
+                                    fontWeight = FontWeight.SemiBold,
+                                    maxLines = 1
                                 )
                             }
                         }
+                        Spacer(Modifier.width(8.dp))
                         Text(
                             "Change",
                             style = MaterialTheme.typography.labelMedium,
@@ -1028,11 +1058,15 @@ fun AddExpenseScreen(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.weight(1f)
+                            ) {
                                 Icon(Icons.Default.Receipt, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.width(8.dp))
-                                Text("Bill / Receipt Photo", fontWeight = FontWeight.SemiBold)
+                                Text("Bill / Receipt Photo", fontWeight = FontWeight.SemiBold, maxLines = 1)
                             }
+                            Spacer(Modifier.width(8.dp))
                             Button(
                                 onClick = {
                                     photoPickerLauncher.launch(
@@ -1040,11 +1074,12 @@ fun AddExpenseScreen(
                                     )
                                 },
                                 shape = RoundedCornerShape(12.dp),
+                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                                 modifier = Modifier.testTag("pick_bill_photo_button")
                             ) {
                                 Icon(Icons.Default.AddPhotoAlternate, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text(if (photoUri == null) "Attach Bill" else "Change")
+                                Text(if (photoUri == null) "Attach" else "Change", maxLines = 1)
                             }
                         }
 

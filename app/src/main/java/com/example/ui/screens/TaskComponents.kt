@@ -5,9 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -18,27 +16,25 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.data.Account
-import com.example.data.Category
 import com.example.data.ScheduleEvent
-import com.example.data.Subtask
 import com.example.data.TaskItem
 import com.example.utils.FormatUtils
 import com.example.utils.TaskUtils
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TaskCard(
     task: TaskItem,
     onStatusToggle: (String) -> Unit,
     onSubtaskToggle: (String) -> Unit,
     onDelete: () -> Unit,
+    onEdit: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val isDone = task.status == "DONE"
@@ -73,6 +69,9 @@ fun TaskCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .then(
+                if (onEdit != null) Modifier.clickable { onEdit() } else Modifier
+            )
             .testTag("task_card_${task.id}"),
         shape = RoundedCornerShape(18.dp),
         colors = CardDefaults.cardColors(
@@ -86,7 +85,7 @@ fun TaskCard(
             else MaterialTheme.colorScheme.outlineVariant
         )
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.Top
@@ -126,15 +125,18 @@ fun TaskCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
                     ) {
                         Text(
                             text = task.title,
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             textDecoration = if (isDone) TextDecoration.LineThrough else TextDecoration.None,
-                            color = if (isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                            color = if (isDone) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
                         )
 
                         // Priority chip
@@ -147,6 +149,8 @@ fun TaskCard(
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
                                 color = priorityColor,
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
@@ -157,17 +161,19 @@ fun TaskCard(
                         Text(
                             text = task.description,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
 
                     Spacer(Modifier.height(8.dp))
 
-                    // Due date, category, repeat tags
-                    Row(
+                    // Due date, category, repeat tags in a responsive FlowRow so words never slice mid-word
+                    FlowRow(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         if (dueText != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -182,7 +188,9 @@ fun TaskCard(
                                     text = dueText,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = if (isOverdue) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                                    fontWeight = if (isOverdue) FontWeight.Bold else FontWeight.Normal
+                                    fontWeight = if (isOverdue) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    softWrap = false
                                 )
                             }
                         }
@@ -195,6 +203,8 @@ fun TaskCard(
                                 text = task.category,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSecondaryContainer,
+                                maxLines = 1,
+                                softWrap = false,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
@@ -203,7 +213,13 @@ fun TaskCard(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Repeat, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.width(2.dp))
-                                Text(task.repeatFrequency.lowercase().replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                Text(
+                                    task.repeatFrequency.lowercase().replaceFirstChar { it.uppercase() },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
                         }
                     }
@@ -233,7 +249,9 @@ fun TaskCard(
                                     else "Will record expense: ${FormatUtils.formatInr(task.linkedAmount)} (${task.linkedAccount ?: "Account"})",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontWeight = FontWeight.SemiBold,
-                                    color = if (isDone) Color(0xFF1B5E20) else Color(0xFFE65100)
+                                    color = if (isDone) Color(0xFF1B5E20) else Color(0xFFE65100),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -296,17 +314,39 @@ fun TaskCard(
                     }
                 }
 
-                // Delete option
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(32.dp).testTag("delete_task_${task.id}")
+                // Edit & Delete options
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
-                    Icon(
-                        Icons.Default.DeleteOutline,
-                        contentDescription = "Delete Task",
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.7f),
-                        modifier = Modifier.size(18.dp)
-                    )
+                    if (onEdit != null) {
+                        IconButton(
+                            onClick = onEdit,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .testTag("edit_task_${task.id}")
+                        ) {
+                            Icon(
+                                Icons.Default.Edit,
+                                contentDescription = "Edit Task",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = onDelete,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .testTag("delete_task_${task.id}")
+                    ) {
+                        Icon(
+                            Icons.Default.DeleteOutline,
+                            contentDescription = "Delete Task",
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.75f),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }
@@ -317,6 +357,7 @@ fun TaskCard(
 fun ScheduleEventCard(
     event: ScheduleEvent,
     onDelete: () -> Unit,
+    onEdit: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val timeFormat = SimpleDateFormat("hh:mm a", Locale.getDefault())
@@ -327,6 +368,9 @@ fun ScheduleEventCard(
     Card(
         modifier = modifier
             .fillMaxWidth()
+            .then(
+                if (onEdit != null) Modifier.clickable { onEdit() } else Modifier
+            )
             .testTag("schedule_event_card_${event.id}"),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)),
@@ -350,24 +394,66 @@ fun ScheduleEventCard(
                     Icon(Icons.Default.Event, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
                 }
                 Spacer(Modifier.width(12.dp))
-                Column {
-                    Text(event.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    Text("$dateStr • $startStr – $endStr", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        event.title,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "$dateStr • $startStr – $endStr",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     if (event.location.isNotBlank()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.LocationOn, contentDescription = null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.primary)
                             Spacer(Modifier.width(2.dp))
-                            Text(event.location, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            Text(
+                                event.location,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }
             }
 
-            IconButton(
-                onClick = onDelete,
-                modifier = Modifier.testTag("delete_event_${event.id}")
-            ) {
-                Icon(Icons.Default.DeleteOutline, contentDescription = "Delete Event", tint = MaterialTheme.colorScheme.error)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (onEdit != null) {
+                    IconButton(
+                        onClick = onEdit,
+                        modifier = Modifier
+                            .size(34.dp)
+                            .testTag("edit_event_${event.id}")
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Edit Event",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .testTag("delete_event_${event.id}")
+                ) {
+                    Icon(
+                        Icons.Default.DeleteOutline,
+                        contentDescription = "Delete Event",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
             }
         }
     }

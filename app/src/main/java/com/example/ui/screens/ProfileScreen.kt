@@ -25,13 +25,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.ui.BiometricHelper
 import com.example.ui.NotificationHelper
 import com.example.utils.FormatUtils
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(onBack: () -> Unit) {
     val context = LocalContext.current
@@ -40,29 +38,11 @@ fun ProfileScreen(onBack: () -> Unit) {
     val coroutineScope = rememberCoroutineScope()
 
     var name by remember { mutableStateOf(FormatUtils.resolveUserDisplayName(prefs)) }
-    var email by remember { mutableStateOf(prefs.getString("user_email", "kutub@app.local") ?: "kutub@app.local") }
-    var tzMode by remember { mutableStateOf(prefs.getString("greeting_tz_mode", "IST") ?: "IST") }
-    var periodOverride by remember { mutableStateOf(prefs.getString("greeting_period_override", "AUTO") ?: "AUTO") }
+    var email by remember { mutableStateOf(prefs.getString("user_email", "Personal Account") ?: "Personal Account") }
 
     var isEditing by remember { mutableStateOf(false) }
     var editName by remember { mutableStateOf(name) }
     var editEmail by remember { mutableStateOf(email) }
-
-    var currentNowMillis by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            currentNowMillis = System.currentTimeMillis()
-            delay(5_000L)
-        }
-    }
-
-    val greetingSnapshot = remember(currentNowMillis, tzMode, periodOverride) {
-        FormatUtils.computeGreetingTimeSnapshot(
-            nowMillis = currentNowMillis,
-            timeZoneMode = tzMode,
-            overridePeriod = periodOverride
-        )
-    }
 
     var hasNotifPerm by remember { mutableStateOf(NotificationHelper.hasNotificationPermission(context)) }
     val notifPermissionLauncher = rememberLauncherForActivityResult(
@@ -72,9 +52,9 @@ fun ProfileScreen(onBack: () -> Unit) {
         coroutineScope.launch {
             if (granted) {
                 NotificationHelper.scheduleDailyReminder(context)
-                snackbarHostState.showSnackbar("Notification permission granted!")
+                snackbarHostState.showSnackbar("Notifications enabled!")
             } else {
-                snackbarHostState.showSnackbar("Notification permission denied.")
+                snackbarHostState.showSnackbar("Notifications turned off.")
             }
         }
     }
@@ -85,10 +65,38 @@ fun ProfileScreen(onBack: () -> Unit) {
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                title = { Text("Profile, Greeting & Permissions", fontWeight = FontWeight.Bold) },
+                title = { Text("My Profile", fontWeight = FontWeight.Bold) },
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = onBack, modifier = Modifier.testTag("profile_back_btn")) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                actions = {
+                    if (isEditing) {
+                        Button(
+                            onClick = {
+                                val finalName = editName.trim().ifEmpty { FormatUtils.DEFAULT_USER_NAME_GUJARATI }
+                                name = finalName
+                                email = editEmail.trim()
+                                prefs.edit()
+                                    .putString("user_name", name)
+                                    .putString("user_email", email)
+                                    .apply()
+                                isEditing = false
+                                coroutineScope.launch {
+                                    snackbarHostState.showSnackbar("Profile saved!")
+                                }
+                            },
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            modifier = Modifier
+                                .padding(end = 8.dp)
+                                .testTag("profile_top_save_btn")
+                        ) {
+                            Icon(Icons.Default.Check, contentDescription = "Save Profile", modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(4.dp))
+                            Text("Save", fontWeight = FontWeight.Bold)
+                        }
                     }
                 }
             )
@@ -103,7 +111,7 @@ fun ProfileScreen(onBack: () -> Unit) {
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 1. User Profile Card (કુતુબ)
+            // 1. User Profile Card
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -120,7 +128,7 @@ fun ProfileScreen(onBack: () -> Unit) {
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(84.dp)
+                            .size(80.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primaryContainer),
                         contentAlignment = Alignment.Center
@@ -140,11 +148,12 @@ fun ProfileScreen(onBack: () -> Unit) {
                         OutlinedTextField(
                             value = editName,
                             onValueChange = { editName = it },
-                            label = { Text("Display Name (ગુજરાતી / English)") },
+                            label = { Text("Your Name") },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("profile_name_input"),
-                            singleLine = true
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp)
                         )
                         Spacer(modifier = Modifier.height(8.dp))
                         Row(
@@ -153,26 +162,26 @@ fun ProfileScreen(onBack: () -> Unit) {
                         ) {
                             AssistChip(
                                 onClick = { editName = "કુતુબ" },
-                                label = { Text("Set કુતુબ (Gujarati)") },
-                                leadingIcon = { Icon(Icons.Default.Translate, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                label = { Text("કુતુબ") }
                             )
                             AssistChip(
                                 onClick = { editName = "Kutub" },
-                                label = { Text("Set Kutub (English)") }
+                                label = { Text("Kutub") }
                             )
                         }
                         Spacer(modifier = Modifier.height(12.dp))
                         OutlinedTextField(
                             value = editEmail,
                             onValueChange = { editEmail = it },
-                            label = { Text("Email / Subtitle") },
+                            label = { Text("Email or Note (Optional)") },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag("profile_email_input"),
-                            singleLine = true
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp)
                         )
 
-                        Spacer(modifier = Modifier.height(20.dp))
+                        Spacer(modifier = Modifier.height(18.dp))
 
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -184,7 +193,8 @@ fun ProfileScreen(onBack: () -> Unit) {
                                     editEmail = email
                                     isEditing = false
                                 },
-                                modifier = Modifier.weight(1f)
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text("Cancel")
                             }
@@ -199,16 +209,17 @@ fun ProfileScreen(onBack: () -> Unit) {
                                         .apply()
                                     isEditing = false
                                     coroutineScope.launch {
-                                        snackbarHostState.showSnackbar("Saved profile name: $name")
+                                        snackbarHostState.showSnackbar("Profile saved!")
                                     }
                                 },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .testTag("profile_save_btn")
+                                    .testTag("profile_save_btn"),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.Check, contentDescription = null)
+                                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(Modifier.width(6.dp))
-                                Text("Save Profile")
+                                Text("Save")
                             }
                         }
                     } else {
@@ -217,173 +228,36 @@ fun ProfileScreen(onBack: () -> Unit) {
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            email,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        if (email.isNotBlank()) {
+                            Text(
+                                email,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        Button(
+                            onClick = {
+                                editName = name
+                                editEmail = email
+                                isEditing = true
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profile_edit_btn"),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            Button(
-                                onClick = {
-                                    editName = name
-                                    editEmail = email
-                                    isEditing = true
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("profile_edit_btn")
-                            ) {
-                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Edit Name")
-                            }
-                            if (name != "કુતુબ") {
-                                OutlinedButton(
-                                    onClick = {
-                                        name = "કુતુબ"
-                                        editName = "કુતુબ"
-                                        prefs.edit().putString("user_name", "કુતુબ").apply()
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar("Name set to કુતુબ")
-                                        }
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text("Use કુતુબ")
-                                }
-                            }
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("Edit Profile")
                         }
                     }
                 }
             }
 
-            // 2. Top-Left Time & Greeting Configuration Card (Morning, Afternoon, Evening, Night)
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("profile_greeting_time_card"),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text(
-                        "Top-Left Greeting & Live Time Settings",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    // Live Top-Left Header Preview
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(14.dp)) {
-                            Text(
-                                "LIVE TOP-LEFT HEADER PREVIEW",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(Modifier.height(4.dp))
-                            Text(
-                                "${greetingSnapshot.greetingEnglish}, $name",
-                                style = MaterialTheme.typography.titleLarge,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Text(
-                                "${greetingSnapshot.formattedTime} ${greetingSnapshot.timeZoneLabel} • ${greetingSnapshot.greetingGujarati} • ${greetingSnapshot.formattedDate}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-
-                    Text(
-                        "Time Zone for Greeting & Clock",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        FilterChip(
-                            selected = tzMode == "IST",
-                            onClick = {
-                                tzMode = "IST"
-                                prefs.edit().putString("greeting_tz_mode", "IST").apply()
-                            },
-                            label = { Text("India Time (IST +5:30)") },
-                            leadingIcon = if (tzMode == "IST") {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                            } else null
-                        )
-                        FilterChip(
-                            selected = tzMode == "SYSTEM",
-                            onClick = {
-                                tzMode = "SYSTEM"
-                                prefs.edit().putString("greeting_tz_mode", "SYSTEM").apply()
-                            },
-                            label = { Text("Device Timezone") },
-                            leadingIcon = if (tzMode == "SYSTEM") {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                            } else null
-                        )
-                    }
-
-                    Text(
-                        "Greeting Mode (Auto by Time or Test Period)",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        "• Morning (5:00 AM – 11:59 AM): Good morning (સુપ્રભાત)\n" +
-                        "• Afternoon (12:00 PM – 4:59 PM): Good afternoon (શુભ બપોર)\n" +
-                        "• Evening (5:00 PM – 8:59 PM): Good evening (શુભ સાંજ)\n" +
-                        "• Night (9:00 PM – 4:59 AM): Good night (શુભ રાત્રિ)",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            "AUTO" to "Auto (Live Clock)",
-                            "MORNING" to "Morning (સુપ્રભાત)",
-                            "AFTERNOON" to "Afternoon (શુભ બપોર)",
-                            "EVENING" to "Evening (શુભ સાંજ)",
-                            "NIGHT" to "Night (શુભ રાત્રિ)"
-                        ).forEach { (key, label) ->
-                            FilterChip(
-                                selected = periodOverride == key,
-                                onClick = {
-                                    periodOverride = key
-                                    prefs.edit().putString("greeting_period_override", key).apply()
-                                },
-                                label = { Text(label) }
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 3. App Permissions & Working Features Card
+            // 2. Reminders & Alerts Card (Simple, user-friendly)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -396,62 +270,31 @@ fun ProfileScreen(onBack: () -> Unit) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        "App Permissions & Why કુતુબ Uses Them",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        "કુતુબ follows strict least-privilege privacy. It only uses the permissions below:",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    val biometricReady = remember(context) { BiometricHelper.isBiometricAvailable(context) }
-
-                    PermissionStatusRow(
-                        title = "1. Notifications (POST_NOTIFICATIONS)",
-                        subtitle = "Runtime permission (Android 13+) for Daily Expense Reminders, Task & Habit Alarms, Bill Due Alerts, and Document Vault Expiry warnings.",
-                        statusText = if (hasNotifPerm) "Granted" else "Tap below to allow",
-                        isGranted = hasNotifPerm
-                    )
-                    HorizontalDivider()
-
-                    PermissionStatusRow(
-                        title = "2. Exact Alarms & Vibration (SCHEDULE_EXACT_ALARM, VIBRATE)",
-                        subtitle = "Triggers scheduled task reminders, daily 8:00 PM expense log alerts, and habit reminders on time.",
-                        statusText = "Active",
-                        isGranted = true
-                    )
-                    HorizontalDivider()
-
-                    PermissionStatusRow(
-                        title = "3. Biometric Hardware (USE_BIOMETRIC)",
-                        subtitle = "Optional Fingerprint or Face Unlock alongside your 4–6 digit PIN for App Lock and Document Vault.",
-                        statusText = if (biometricReady) "Enrolled" else "PIN Fallback Active",
-                        isGranted = true
-                    )
-                    HorizontalDivider()
-
-                    PermissionStatusRow(
-                        title = "4. Network & Internet (INTERNET, ACCESS_NETWORK_STATE)",
-                        subtitle = "Used ONLY for Gemini AI Assistant (Smart Entry, Receipt Scan, Insights) and optional Firebase Cloud Sync. All 12 modules work 100% offline.",
-                        statusText = "Active",
-                        isGranted = true
-                    )
-                    HorizontalDivider()
-
-                    PermissionStatusRow(
-                        title = "5. Zero Storage/Camera Permissions (System Picker & SAF)",
-                        subtitle = "Document Vault & Backup/Restore use Android's secure Photo Picker & Storage Access Framework—no invasive gallery or file storage permission is ever asked.",
-                        statusText = "Privacy Safe",
-                        isGranted = true
-                    )
-
-                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Reminders & Alerts",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                if (hasNotifPerm) "Notifications are turned on for your tasks, bills, and daily reminders."
+                                else "Turn on notifications to receive bill, task, and habit reminders on time.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -464,11 +307,10 @@ fun ProfileScreen(onBack: () -> Unit) {
                                 },
                                 modifier = Modifier
                                     .weight(1f)
-                                    .testTag("request_notif_permission_btn")
+                                    .testTag("request_notif_permission_btn"),
+                                shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(Icons.Default.NotificationsActive, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text("Allow Notifications")
+                                Text("Turn On Alerts")
                             }
                         }
                         OutlinedButton(
@@ -480,8 +322,8 @@ fun ProfileScreen(onBack: () -> Unit) {
                                 } else {
                                     NotificationHelper.sendTaskNotification(
                                         context = context,
-                                        title = "કુતુબ • ${greetingSnapshot.greetingEnglish}!",
-                                        message = "Your reminders and notifications are working properly (${greetingSnapshot.formattedTime})."
+                                        title = "Kutub (કુતુબ)",
+                                        message = "Your reminders and notifications are working properly."
                                     )
                                     coroutineScope.launch {
                                         snackbarHostState.showSnackbar("Test notification sent!")
@@ -490,70 +332,66 @@ fun ProfileScreen(onBack: () -> Unit) {
                             },
                             modifier = Modifier
                                 .weight(1f)
-                                .testTag("send_test_notification_btn")
+                                .testTag("send_test_notification_btn"),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
                             Icon(Icons.Default.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
-                            Text("Test Notification")
+                            Text("Test Alert")
                         }
                     }
                 }
             }
-        }
-    }
-}
 
-@Composable
-private fun PermissionStatusRow(
-    title: String,
-    subtitle: String,
-    statusText: String,
-    isGranted: Boolean
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Icon(
-            imageVector = if (isGranted) Icons.Default.CheckCircle else Icons.Default.Info,
-            contentDescription = null,
-            tint = if (isGranted) Color(0xFF2E7D32) else MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .padding(top = 2.dp)
-                .size(20.dp)
-        )
-        Column(modifier = Modifier.weight(1f)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            // 3. About Kutub Card (Simple, non-technical)
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("profile_device_requirements_card"),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
             ) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f)
-                )
-                Surface(
-                    color = if (isGranted) Color(0xFF2E7D32).copy(alpha = 0.14f) else MaterialTheme.colorScheme.secondaryContainer,
-                    shape = RoundedCornerShape(8.dp)
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.VerifiedUser,
+                            contentDescription = null,
+                            tint = Color(0xFF2E7D32)
+                        )
+                        Column {
+                            Text(
+                                "About Kutub (કુતુબ)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                "Daily Money, Tasks, Schedule, Notes & Habits",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    HorizontalDivider()
+
                     Text(
-                        statusText,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (isGranted) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSecondaryContainer,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                        "• Works 100% offline on your phone\n" +
+                        "• Your financial data, notes, and documents stay private on your device\n" +
+                        "• Supports PIN & Fingerprint lock and easy backup",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            Spacer(Modifier.height(2.dp))
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }

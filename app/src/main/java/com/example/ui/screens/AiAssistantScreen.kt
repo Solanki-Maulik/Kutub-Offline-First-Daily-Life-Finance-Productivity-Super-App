@@ -108,6 +108,17 @@ fun AiAssistantScreen(
         topBar = {
             TopAppBar(
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                navigationIcon = {
+                    IconButton(
+                        onClick = { navController.popBackStack() },
+                        modifier = Modifier.testTag("ai_assistant_back_btn")
+                    ) {
+                        Icon(
+                            Icons.Default.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                },
                 title = {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Icon(
@@ -116,11 +127,19 @@ fun AiAssistantScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                         Column {
-                            Text("AI Assistant", fontWeight = FontWeight.ExtraBold)
                             Text(
-                                "Powered by Gemini • App Check Secured • Minimum Data",
+                                "Gemini AI Assistant",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.ExtraBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                "Fast AI Data Entry & Financial Helpers",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
+                                color = MaterialTheme.colorScheme.primary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                         }
                     }
@@ -313,6 +332,7 @@ fun SmartEntryHelperSection(
     }
     var editableEntries by remember { mutableStateOf<List<SmartParsedEntry>>(emptyList()) }
     var savedBannerCount by remember { mutableStateOf<Int?>(null) }
+    var savedBannerMessage by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(smartState) {
         val current = smartState
@@ -349,16 +369,16 @@ fun SmartEntryHelperSection(
                     }
                 }
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("AI Smart Entry", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                    Text("AI Smart Data Entry", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     Text(
-                        "Type multiple expenses, income, or Udhaar in plain words and review before saving.",
+                        "Add Expenses, Income, Transfers, Udhaar, Tasks, Schedule, Habits & Notes in plain words.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
 
-            // Quick Sample Prompts
+            // Quick Sample Prompts covering all modules
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -367,12 +387,17 @@ fun SmartEntryHelperSection(
             ) {
                 val examples = listOf(
                     "chai 20 cash, petrol 300 bank, got 5000 from Raj",
-                    "lunch 180 upi, groceries 640 bank",
-                    "salary 50000 bank, gave 1000 to Amit cash"
+                    "task pay electricity bill, habit morning walk",
+                    "schedule client meeting 4pm, note tax receipt saved",
+                    "salary 50000 bank, transfer 5000 bank to cash"
                 )
                 examples.forEach { sample ->
                     AssistChip(
-                        onClick = { inputText = sample },
+                        onClick = {
+                            inputText = sample
+                            savedBannerCount = null
+                            savedBannerMessage = null
+                        },
                         label = { Text(sample, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     )
                 }
@@ -383,8 +408,9 @@ fun SmartEntryHelperSection(
                 onValueChange = {
                     inputText = it
                     savedBannerCount = null
+                    savedBannerMessage = null
                 },
-                label = { Text("Describe transactions (e.g. chai 20 cash, petrol 300 bank, got 5000 from Raj)") },
+                label = { Text("Type expense, income, udhaar, task, habit, schedule or note") },
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("smart_entry_input"),
@@ -393,33 +419,62 @@ fun SmartEntryHelperSection(
                 shape = RoundedCornerShape(14.dp)
             )
 
-            Button(
-                onClick = {
-                    savedBannerCount = null
-                    viewModel.parseSmartEntryWithAi(inputText)
-                },
-                enabled = smartState !is AiUiState.Loading && inputText.isNotBlank(),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("smart_entry_parse_btn"),
-                shape = RoundedCornerShape(14.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                if (smartState is AiUiState.Loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text("Parsing with Gemini...")
-                } else {
+                Button(
+                    onClick = {
+                        savedBannerCount = null
+                        savedBannerMessage = null
+                        viewModel.quickSaveSmartEntryWithAi(inputText) { count, msg ->
+                            savedBannerCount = count
+                            savedBannerMessage = msg
+                            if (count > 0) {
+                                onSavedCallback?.invoke(count)
+                            }
+                        }
+                    },
+                    enabled = smartState !is AiUiState.Loading && inputText.isNotBlank(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("smart_entry_quick_save_btn"),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    if (smartState is AiUiState.Loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text("Saving...", maxLines = 1)
+                    } else {
+                        Icon(Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("AI Save Now", fontWeight = FontWeight.Bold, maxLines = 1)
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        savedBannerCount = null
+                        savedBannerMessage = null
+                        viewModel.parseSmartEntryWithAi(inputText)
+                    },
+                    enabled = smartState !is AiUiState.Loading && inputText.isNotBlank(),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("smart_entry_parse_btn"),
+                    shape = RoundedCornerShape(14.dp)
+                ) {
                     Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Parse into Structured Entries", fontWeight = FontWeight.Bold)
+                    Spacer(Modifier.width(6.dp))
+                    Text("Review & Edit", fontWeight = FontWeight.Bold, maxLines = 1)
                 }
             }
 
-            if (savedBannerCount != null) {
+            if (savedBannerCount != null || savedBannerMessage != null) {
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
                     shape = RoundedCornerShape(12.dp),
@@ -432,8 +487,9 @@ fun SmartEntryHelperSection(
                     ) {
                         Icon(Icons.Default.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Text(
-                            "Confirmed and saved $savedBannerCount transaction(s)!",
+                            savedBannerMessage ?: "Confirmed and saved ${savedBannerCount ?: 0} item(s)!",
                             fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
                     }
@@ -469,14 +525,14 @@ fun SmartEntryHelperSection(
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         "Confirm Parsed Entries (${editableEntries.count { it.selected }})",
                                         style = MaterialTheme.typography.titleSmall,
                                         fontWeight = FontWeight.ExtraBold
                                     )
                                     Text(
-                                        "Review or edit fields below before saving to your ledger.",
+                                        "Review or edit fields below before saving.",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -497,11 +553,12 @@ fun SmartEntryHelperSection(
                                 )
                             }
 
-                            val selectedCount = editableEntries.count { it.selected && it.amount > 0.0 }
+                            val selectedCount = editableEntries.count { it.isReadyToSave }
                             Button(
                                 onClick = {
                                     viewModel.confirmAndSaveSmartEntries(editableEntries) { count ->
                                         savedBannerCount = count
+                                        savedBannerMessage = "Confirmed and saved $count item(s)!"
                                         onSavedCallback?.invoke(count)
                                     }
                                 },
@@ -535,7 +592,7 @@ private fun SmartEntryConfirmationCard(
     var amountText by remember(entry.id, entry.amount) {
         mutableStateOf(if (entry.amount % 1.0 == 0.0) entry.amount.toLong().toString() else entry.amount.toString())
     }
-    val kindTypes = listOf("EXPENSE", "INCOME", "UDHAAR_GOT", "UDHAAR_GAVE", "TRANSFER")
+    val kindTypes = listOf("EXPENSE", "INCOME", "UDHAAR_GOT", "UDHAAR_GAVE", "TRANSFER", "TASK", "SCHEDULE", "HABIT", "NOTE")
 
     Surface(
         color = MaterialTheme.colorScheme.surface,
@@ -556,7 +613,10 @@ private fun SmartEntryConfirmationCard(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Checkbox(
                         checked = entry.selected,
                         onCheckedChange = { onUpdate(entry.copy(selected = it)) }
@@ -564,12 +624,15 @@ private fun SmartEntryConfirmationCard(
                     Text(
                         text = entry.note.ifBlank { entry.category },
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
                 Badge(
                     containerColor = when (entry.entryKind) {
                         "INCOME", "UDHAAR_GOT" -> MaterialTheme.colorScheme.primaryContainer
+                        "TASK", "SCHEDULE", "HABIT", "NOTE" -> MaterialTheme.colorScheme.tertiaryContainer
                         else -> MaterialTheme.colorScheme.secondaryContainer
                     }
                 ) {
@@ -604,52 +667,85 @@ private fun SmartEntryConfirmationCard(
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = amountText,
-                    onValueChange = { newVal ->
-                        amountText = newVal
-                        val parsed = newVal.toDoubleOrNull() ?: 0.0
-                        onUpdate(entry.copy(amount = parsed))
-                    },
-                    label = { Text("Amount (₹)") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = entry.category,
-                    onValueChange = { onUpdate(entry.copy(category = it)) },
-                    label = { Text("Category") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-            }
+            OutlinedTextField(
+                value = entry.note,
+                onValueChange = { onUpdate(entry.copy(note = it)) },
+                label = { Text(if (entry.requiresAmount) "Description / Note" else "Title / Details") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = entry.account,
-                    onValueChange = { onUpdate(entry.copy(account = it)) },
-                    label = { Text("Account") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-                OutlinedTextField(
-                    value = entry.dateString,
-                    onValueChange = {
-                        val (_, ts) = AiDataSummaryBuilder.parseDdMmYyyyOrToday(it, entry.timestamp)
-                        onUpdate(entry.copy(dateString = it, timestamp = ts))
-                    },
-                    label = { Text("Date (DD/MM/YYYY)") },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
+            if (entry.requiresAmount) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = amountText,
+                        onValueChange = { newVal ->
+                            amountText = newVal
+                            val parsed = newVal.toDoubleOrNull() ?: 0.0
+                            onUpdate(entry.copy(amount = parsed))
+                        },
+                        label = { Text("Amount (₹)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = entry.category,
+                        onValueChange = { onUpdate(entry.copy(category = it)) },
+                        label = { Text("Category") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = entry.account,
+                        onValueChange = { onUpdate(entry.copy(account = it)) },
+                        label = { Text("Account") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = entry.dateString,
+                        onValueChange = {
+                            val (_, ts) = AiDataSummaryBuilder.parseDdMmYyyyOrToday(it, entry.timestamp)
+                            onUpdate(entry.copy(dateString = it, timestamp = ts))
+                        },
+                        label = { Text("Date (DD/MM/YYYY)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = entry.category,
+                        onValueChange = { onUpdate(entry.copy(category = it)) },
+                        label = { Text("Category") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = entry.dateString,
+                        onValueChange = {
+                            val (_, ts) = AiDataSummaryBuilder.parseDdMmYyyyOrToday(it, entry.timestamp)
+                            onUpdate(entry.copy(dateString = it, timestamp = ts))
+                        },
+                        label = { Text("Date (DD/MM/YYYY)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
 
             if (entry.entryKind in setOf("UDHAAR_GOT", "UDHAAR_GAVE") || entry.personName.isNotBlank()) {
@@ -663,7 +759,7 @@ private fun SmartEntryConfirmationCard(
             }
 
             // Quick account chips from user's actual accounts
-            if (accounts.isNotEmpty()) {
+            if (entry.requiresAmount && accounts.isNotEmpty()) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()

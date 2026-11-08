@@ -50,34 +50,19 @@ object FormatUtils {
 
     /**
      * Resolves the active TimeZone for top-left greeting and clock.
-     * Defaults to India Standard Time (Asia/Kolkata, UTC+5:30) so cloud emulators
-     * (which run in America/Los_Angeles or UTC) show accurate Indian Morning/Afternoon/Evening/Night.
+     * Uses the phone's default timezone automatically unless an explicit timezone ID is passed.
      */
-    fun resolveGreetingTimeZone(timeZoneMode: String = "IST"): TimeZone {
+    fun resolveGreetingTimeZone(timeZoneMode: String = "SYSTEM"): TimeZone {
         return when (timeZoneMode.uppercase(Locale.US)) {
             "IST", "ASIA/KOLKATA" -> TimeZone.getTimeZone("Asia/Kolkata")
-            "SYSTEM", "DEVICE" -> TimeZone.getDefault()
-            else -> {
-                val sysTz = TimeZone.getDefault()
-                val sysId = sysTz.id
-                if (currentCurrencyCode == "INR" && (
-                        sysId == "America/Los_Angeles" ||
-                        sysId == "America/New_York" ||
-                        sysId == "UTC" ||
-                        sysId == "GMT" ||
-                        sysId == "Etc/UTC"
-                    )
-                ) {
-                    TimeZone.getTimeZone("Asia/Kolkata")
-                } else {
-                    sysTz
-                }
-            }
+            "UTC", "GMT" -> TimeZone.getTimeZone("UTC")
+            else -> TimeZone.getDefault()
         }
     }
 
     /**
-     * Computes the time-of-day greeting (Morning, Afternoon, Evening, Night) and formatted live time/date.
+     * Computes the time-of-day greeting (Morning, Afternoon, Evening, Night) and formatted live time/date
+     * using the phone's default time:
      * - Morning:   05:00 AM – 11:59 AM (hour 5..11)  -> "Good morning" (સુપ્રભાત)
      * - Afternoon: 12:00 PM – 04:59 PM (hour 12..16) -> "Good afternoon" (શુભ બપોર)
      * - Evening:   05:00 PM – 08:59 PM (hour 17..20) -> "Good evening" (શુભ સાંજ)
@@ -85,7 +70,7 @@ object FormatUtils {
      */
     fun computeGreetingTimeSnapshot(
         nowMillis: Long = System.currentTimeMillis(),
-        timeZoneMode: String = "IST",
+        timeZoneMode: String = "SYSTEM",
         overridePeriod: String = "AUTO"
     ): GreetingTimeSnapshot {
         val tz = resolveGreetingTimeZone(timeZoneMode)
@@ -108,17 +93,13 @@ object FormatUtils {
             else -> Triple("Good night", "શુભ રાત્રિ", "Night")
         }
 
-        val timeFmt = SimpleDateFormat("hh:mm a", Locale.US).apply {
+        val timeFmt = SimpleDateFormat("hh:mm a", Locale.getDefault()).apply {
             timeZone = tz
         }
-        val dateFmt = SimpleDateFormat("EEEE, dd MMM yyyy", Locale.US).apply {
+        val dateFmt = SimpleDateFormat("EEE, dd MMM yyyy", Locale.getDefault()).apply {
             timeZone = tz
         }
-        val tzShort = if (tz.id == "Asia/Kolkata" || tz.id == "Asia/Calcutta") {
-            "IST"
-        } else {
-            tz.getDisplayName(false, TimeZone.SHORT, Locale.US)
-        }
+        val tzShort = tz.getDisplayName(false, TimeZone.SHORT, Locale.getDefault())
 
         return GreetingTimeSnapshot(
             greetingEnglish = greetingEn,

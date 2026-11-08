@@ -2694,16 +2694,124 @@ class FinanceViewModel(private val repository: TransactionRepository, private va
         entries: List<com.example.utils.SmartParsedEntry>,
         onComplete: (Int) -> Unit = {}
     ) {
-        val selectedEntries = entries.filter { it.selected && it.amount > 0.0 }
+        val selectedEntries = entries.filter { it.isReadyToSave }
         if (selectedEntries.isEmpty()) {
             onComplete(0)
             return
         }
         viewModelScope.launch {
-            var savedCount = 0
-            selectedEntries.forEach { item ->
-                when (item.entryKind.uppercase()) {
-                    "UDHAAR_GOT", "UDHAAR_GAVE" -> {
+            val savedCount = persistSmartEntriesSuspend(selectedEntries)
+            _smartEntryState.value = com.example.utils.AiUiState.Idle
+            onComplete(savedCount)
+        }
+    }
+
+    fun quickSaveSmartEntryWithAi(
+        userInput: String,
+        onComplete: (Int, String) -> Unit = { _, _ -> }
+    ) {
+        if (userInput.isBlank()) {
+            onComplete(0, "Please enter text to add.")
+            return
+        }
+        viewModelScope.launch {
+            _smartEntryState.value = com.example.utils.AiUiState.Loading("Saving with Gemini AI...")
+            val resultState = geminiAiService.parseSmartEntry(
+                userInput = userInput,
+                accounts = accounts.value,
+                categories = categories.value
+            )
+            when (resultState) {
+                is com.example.utils.AiUiState.Success -> {
+                    val ready = resultState.data.entries.filter { it.isReadyToSave }
+                    if (ready.isEmpty()) {
+                        _smartEntryState.value = com.example.utils.AiUiState.Idle
+                        onComplete(0, "Could not detect valid entries. Try e.g. 'chai 20 cash, task pay bill'.")
+                    } else {
+                        val savedCount = persistSmartEntriesSuspend(ready)
+                        val summaryLabels = ready.take(4).joinToString(", ") { entry ->
+                            when (entry.entryKind.uppercase()) {
+                                "TASK" -> "Task: ${entry.note}"
+                                "SCHEDULE" -> "Schedule: ${entry.note}"
+                                "HABIT" -> "Habit: ${entry.note}"
+                                "NOTE" -> "Note: ${entry.note}"
+                                else -> "₹${entry.amount.toLong()} ${entry.note}"
+                            }
+                        }
+                        _smartEntryState.value = com.example.utils.AiUiState.Idle
+                        onComplete(savedCount, "Saved $savedCount item(s): $summaryLabels")
+                    }
+                }
+                is com.example.utils.AiUiState.Error -> {
+                    _smartEntryState.value = com.example.utils.AiUiState.Idle
+                    onComplete(0, resultState.message)
+                }
+                else -> {
+                    _smartEntryState.value = com.example.utils.AiUiState.Idle
+                    onComplete(0, "Could not complete request.")
+                }
+            }
+        }
+    }
+
+    private suspend fun persistSmartEntriesSuspend(
+        selectedEntries: List<com.example.utils.SmartParsedEntry>
+    ): Int {
+        var savedCount = 0
+        selectedEntries.forEach { item ->
+            when (item.entryKind.uppercase()) {
+                "TASK" -> {
+                    repository.insertTask(
+                        TaskItem(
+                            title = item.note.trim().ifBlank { "New Task" },
+                            description = "Added via Gemini AI",
+                            priority = "MEDIUM",
+                            category = item.category.ifBlank { "Personal" },
+                            dueDateTime = item.timestamp + (24L * 60L * 60L * 1000L),
+                            status = "TODO"
+                        )
+                    )
+                    savedCount++
+                }
+                "SCHEDULE" -> {
+                    val startMs = item.timestamp + (60L * 60L * 1000L)
+                    repository.insertEvent(
+                        ScheduleEvent(
+                            title = item.note.trim().ifBlank { "Scheduled Event" },
+                            description = "Added via Gemini AI",
+                            startTime = startMs,
+                            endTime = startMs + (60L * 60L * 1000L),
+                            location = "",
+                            category = item.category.ifBlank { "Personal" }
+                        )
+                    )
+                    savedCount++
+                }
+                "HABIT" -> {
+                    repository.insertHabit(
+                        Habit(
+                            name = item.note.trim().ifBlank { "Daily Habit" },
+                            frequencyType = "DAILY",
+                            timesPerWeek = 7,
+                            createdAt = item.timestamp
+                        )
+                    )
+                    savedCount++
+                }
+                "NOTE" -> {
+                    val now = System.currentTimeMillis()
+                    repository.insertNote(
+                        MoneyNote(
+                            title = item.note.trim().take(45).ifBlank { "Quick Note" },
+                            content = item.note.trim(),
+                            timestamp = now,
+                            updatedAt = now
+                        )
+                    )
+                    savedCount++
+                }
+                "UDHAAR_GOT", "UDHAAR_GAVE" -> {
+                    if (item.amount > 0.0) {
                         val pName = item.personName.trim()
                         if (pName.isNotBlank()) {
                             val udhaarType = if (item.entryKind.uppercase() == "UDHAAR_GOT") "TOOK" else "GAVE"
@@ -2740,7 +2848,6 @@ class FinanceViewModel(private val repository: TransactionRepository, private va
                                 )
                             )
                         } else {
-                            // Fallback to standard income/expense if no person name
                             repository.insert(
                                 Transaction(
                                     amount = item.amount,
@@ -2755,7 +2862,9 @@ class FinanceViewModel(private val repository: TransactionRepository, private va
                         }
                         savedCount++
                     }
-                    "TRANSFER" -> {
+                }
+                "TRANSFER" -> {
+                    if (item.amount > 0.0) {
                         val dest = item.toAccount.ifBlank {
                             accounts.value.firstOrNull { !it.name.equals(item.account, ignoreCase = true) }?.name ?: "Bank Account"
                         }
@@ -2767,7 +2876,9 @@ class FinanceViewModel(private val repository: TransactionRepository, private va
                         )
                         savedCount++
                     }
-                    "INCOME" -> {
+                }
+                "INCOME" -> {
+                    if (item.amount > 0.0) {
                         repository.insert(
                             Transaction(
                                 amount = item.amount,
@@ -2781,7 +2892,9 @@ class FinanceViewModel(private val repository: TransactionRepository, private va
                         )
                         savedCount++
                     }
-                    else -> {
+                }
+                else -> {
+                    if (item.amount > 0.0) {
                         repository.insert(
                             Transaction(
                                 amount = item.amount,
@@ -2797,9 +2910,8 @@ class FinanceViewModel(private val repository: TransactionRepository, private va
                     }
                 }
             }
-            _smartEntryState.value = com.example.utils.AiUiState.Idle
-            onComplete(savedCount)
         }
+        return savedCount
     }
 
     fun scanReceiptWithAi(imageUri: android.net.Uri) {

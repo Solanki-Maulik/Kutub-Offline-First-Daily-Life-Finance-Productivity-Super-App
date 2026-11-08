@@ -1,8 +1,6 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,7 +21,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.example.data.ScheduleEvent
 import com.example.data.TaskItem
-import com.example.utils.FormatUtils
+import com.example.ui.components.AutoSizeSingleLineText
 import com.example.utils.TaskUtils
 import com.example.viewmodel.FinanceViewModel
 import java.util.Calendar
@@ -54,6 +52,8 @@ fun TasksScheduleScreen(
 
     var showAddTaskDialog by remember { mutableStateOf(false) }
     var showAddEventDialog by remember { mutableStateOf(false) }
+    var taskToEdit by remember { mutableStateOf<TaskItem?>(null) }
+    var eventToEdit by remember { mutableStateOf<ScheduleEvent?>(null) }
 
     // Date prefill for calendar
     var prefilledDateMillis by remember { mutableStateOf<Long?>(null) }
@@ -109,6 +109,36 @@ fun TasksScheduleScreen(
         )
     }
 
+    // Edit Task Dialog
+    if (taskToEdit != null) {
+        val editing = taskToEdit!!
+        AddTaskDialog(
+            onDismiss = { taskToEdit = null },
+            accounts = accounts,
+            categories = categories,
+            existingTask = editing,
+            onSaveTask = { title, desc, prio, cat, due, repeat, subtasks, isMoney, amt, acc, lCat, reminder ->
+                viewModel.updateTask(
+                    editing.copy(
+                        title = title,
+                        description = desc,
+                        priority = prio,
+                        category = cat,
+                        dueDateTime = due,
+                        repeatFrequency = repeat,
+                        subtasksJson = TaskUtils.serializeSubtasks(subtasks),
+                        isLinkedToMoney = isMoney,
+                        linkedAmount = amt,
+                        linkedAccount = acc,
+                        linkedCategory = lCat,
+                        reminderEnabled = reminder
+                    )
+                )
+                taskToEdit = null
+            }
+        )
+    }
+
     // Add Event Dialog
     if (showAddEventDialog) {
         AddScheduleEventDialog(
@@ -128,6 +158,30 @@ fun TasksScheduleScreen(
                     reminderEnabled = rem,
                     reminderOffsetMinutes = off
                 )
+            }
+        )
+    }
+
+    // Edit Event Dialog
+    if (eventToEdit != null) {
+        val editingEvt = eventToEdit!!
+        AddScheduleEventDialog(
+            onDismiss = { eventToEdit = null },
+            existingEvent = editingEvt,
+            onSaveEvent = { title, desc, start, end, loc, cat, rem, off ->
+                viewModel.updateScheduleEvent(
+                    editingEvt.copy(
+                        title = title,
+                        description = desc,
+                        startTime = start,
+                        endTime = end,
+                        location = loc,
+                        category = cat,
+                        reminderEnabled = rem,
+                        reminderOffsetMinutes = off
+                    )
+                )
+                eventToEdit = null
             }
         )
     }
@@ -179,7 +233,7 @@ fun TasksScheduleScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // View Selector Tabs (Today, Upcoming, Calendar, Completed)
+            // View Selector Tabs (Today, Upcoming, Calendar, Completed) with responsive single-line text
             TabRow(
                 selectedTabIndex = selectedView.ordinal,
                 modifier = Modifier.fillMaxWidth().testTag("task_view_tabs")
@@ -188,7 +242,14 @@ fun TasksScheduleScreen(
                     Tab(
                         selected = selectedView == mode,
                         onClick = { selectedView = mode },
-                        text = { Text(mode.title, fontWeight = if (selectedView == mode) FontWeight.Bold else FontWeight.Normal) },
+                        text = {
+                            AutoSizeSingleLineText(
+                                text = mode.title,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = if (selectedView == mode) FontWeight.Bold else FontWeight.Normal,
+                                minFontSizeSp = 9.5f
+                            )
+                        },
                         icon = { Icon(mode.icon, contentDescription = mode.title, modifier = Modifier.size(18.dp)) },
                         modifier = Modifier.testTag("tab_${mode.name.lowercase()}")
                     )
@@ -207,6 +268,8 @@ fun TasksScheduleScreen(
                         onSubtaskToggle = { task, stId -> viewModel.toggleSubtask(task, stId) },
                         onDeleteTask = { task -> viewModel.deleteTask(task.id) },
                         onDeleteEvent = { event -> viewModel.deleteScheduleEvent(event.id) },
+                        onEditTask = { task -> taskToEdit = task },
+                        onEditEvent = { event -> eventToEdit = event },
                         onQuickAddTask = { showAddTaskDialog = true }
                     )
                 }
@@ -217,7 +280,9 @@ fun TasksScheduleScreen(
                         onTaskStatusToggle = { task, newStatus -> viewModel.toggleTaskStatus(task, newStatus) },
                         onSubtaskToggle = { task, stId -> viewModel.toggleSubtask(task, stId) },
                         onDeleteTask = { task -> viewModel.deleteTask(task.id) },
-                        onDeleteEvent = { event -> viewModel.deleteScheduleEvent(event.id) }
+                        onDeleteEvent = { event -> viewModel.deleteScheduleEvent(event.id) },
+                        onEditTask = { task -> taskToEdit = task },
+                        onEditEvent = { event -> eventToEdit = event }
                     )
                 }
                 TaskViewMode.CALENDAR -> {
@@ -235,7 +300,9 @@ fun TasksScheduleScreen(
                         onAddEventForDate = { dateMillis ->
                             prefilledDateMillis = dateMillis
                             showAddEventDialog = true
-                        }
+                        },
+                        onEditTask = { task -> taskToEdit = task },
+                        onEditEvent = { event -> eventToEdit = event }
                     )
                 }
                 TaskViewMode.COMPLETED -> {
@@ -243,7 +310,8 @@ fun TasksScheduleScreen(
                         completedTasks = completedTasks,
                         taskStats = taskStats,
                         onTaskStatusToggle = { task, newStatus -> viewModel.toggleTaskStatus(task, newStatus) },
-                        onDeleteTask = { task -> viewModel.deleteTask(task.id) }
+                        onDeleteTask = { task -> viewModel.deleteTask(task.id) },
+                        onEditTask = { task -> taskToEdit = task }
                     )
                 }
             }
@@ -262,6 +330,8 @@ private fun TodayView(
     onSubtaskToggle: (TaskItem, String) -> Unit,
     onDeleteTask: (TaskItem) -> Unit,
     onDeleteEvent: (ScheduleEvent) -> Unit,
+    onEditTask: (TaskItem) -> Unit,
+    onEditEvent: (ScheduleEvent) -> Unit,
     onQuickAddTask: () -> Unit
 ) {
     LazyColumn(
@@ -288,8 +358,8 @@ private fun TodayView(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("🔥", style = MaterialTheme.typography.titleLarge)
                             Spacer(Modifier.width(6.dp))
-                            Text(
-                                "${taskStats.currentStreak} Day Streak",
+                            AutoSizeSingleLineText(
+                                text = "${taskStats.currentStreak} Day Streak",
                                 style = MaterialTheme.typography.titleLarge,
                                 fontWeight = FontWeight.Bold,
                                 color = Color(0xFFE65100)
@@ -349,7 +419,8 @@ private fun TodayView(
                     task = task,
                     onStatusToggle = { nextStatus -> onTaskStatusToggle(task, nextStatus) },
                     onSubtaskToggle = { stId -> onSubtaskToggle(task, stId) },
-                    onDelete = { onDeleteTask(task) }
+                    onDelete = { onDeleteTask(task) },
+                    onEdit = { onEditTask(task) }
                 )
             }
         }
@@ -367,7 +438,8 @@ private fun TodayView(
             items(todayEvents, key = { "evt_${it.id}" }) { event ->
                 ScheduleEventCard(
                     event = event,
-                    onDelete = { onDeleteEvent(event) }
+                    onDelete = { onDeleteEvent(event) },
+                    onEdit = { onEditEvent(event) }
                 )
             }
         }
@@ -431,7 +503,8 @@ private fun TodayView(
                     task = task,
                     onStatusToggle = { nextStatus -> onTaskStatusToggle(task, nextStatus) },
                     onSubtaskToggle = { stId -> onSubtaskToggle(task, stId) },
-                    onDelete = { onDeleteTask(task) }
+                    onDelete = { onDeleteTask(task) },
+                    onEdit = { onEditTask(task) }
                 )
             }
         }
@@ -451,7 +524,8 @@ private fun TodayView(
                     task = task,
                     onStatusToggle = { nextStatus -> onTaskStatusToggle(task, nextStatus) },
                     onSubtaskToggle = { stId -> onSubtaskToggle(task, stId) },
-                    onDelete = { onDeleteTask(task) }
+                    onDelete = { onDeleteTask(task) },
+                    onEdit = { onEditTask(task) }
                 )
             }
         }
@@ -465,7 +539,9 @@ private fun UpcomingView(
     onTaskStatusToggle: (TaskItem, String) -> Unit,
     onSubtaskToggle: (TaskItem, String) -> Unit,
     onDeleteTask: (TaskItem) -> Unit,
-    onDeleteEvent: (ScheduleEvent) -> Unit
+    onDeleteEvent: (ScheduleEvent) -> Unit,
+    onEditTask: (TaskItem) -> Unit,
+    onEditEvent: (ScheduleEvent) -> Unit
 ) {
     val tomorrowCal = Calendar.getInstance().apply {
         add(Calendar.DAY_OF_YEAR, 1)
@@ -496,7 +572,11 @@ private fun UpcomingView(
                 )
             }
             items(upcomingEvents, key = { "up_evt_${it.id}" }) { event ->
-                ScheduleEventCard(event = event, onDelete = { onDeleteEvent(event) })
+                ScheduleEventCard(
+                    event = event,
+                    onDelete = { onDeleteEvent(event) },
+                    onEdit = { onEditEvent(event) }
+                )
             }
         }
 
@@ -514,7 +594,8 @@ private fun UpcomingView(
                     task = task,
                     onStatusToggle = { nextStatus -> onTaskStatusToggle(task, nextStatus) },
                     onSubtaskToggle = { stId -> onSubtaskToggle(task, stId) },
-                    onDelete = { onDeleteTask(task) }
+                    onDelete = { onDeleteTask(task) },
+                    onEdit = { onEditTask(task) }
                 )
             }
         }
@@ -533,7 +614,8 @@ private fun UpcomingView(
                     task = task,
                     onStatusToggle = { nextStatus -> onTaskStatusToggle(task, nextStatus) },
                     onSubtaskToggle = { stId -> onSubtaskToggle(task, stId) },
-                    onDelete = { onDeleteTask(task) }
+                    onDelete = { onDeleteTask(task) },
+                    onEdit = { onEditTask(task) }
                 )
             }
         }
@@ -553,7 +635,8 @@ private fun CompletedView(
     completedTasks: List<TaskItem>,
     taskStats: com.example.data.TaskStats,
     onTaskStatusToggle: (TaskItem, String) -> Unit,
-    onDeleteTask: (TaskItem) -> Unit
+    onDeleteTask: (TaskItem) -> Unit,
+    onEditTask: (TaskItem) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -597,7 +680,8 @@ private fun CompletedView(
                     task = task,
                     onStatusToggle = { nextStatus -> onTaskStatusToggle(task, nextStatus) },
                     onSubtaskToggle = {},
-                    onDelete = { onDeleteTask(task) }
+                    onDelete = { onDeleteTask(task) },
+                    onEdit = { onEditTask(task) }
                 )
             }
         }

@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -276,11 +277,12 @@ fun AccountsScreen(viewModel: FinanceViewModel, navController: NavController) {
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        Text(
-                            FormatUtils.formatInr(totalBalance),
+                        com.example.ui.components.AutoSizeSingleLineText(
+                            text = FormatUtils.formatInr(totalBalance),
                             style = MaterialTheme.typography.headlineLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            minFontSizeSp = 18f
                         )
                         Spacer(Modifier.height(16.dp))
 
@@ -307,14 +309,17 @@ fun AccountsScreen(viewModel: FinanceViewModel, navController: NavController) {
                                         Text(
                                             "Cash",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            softWrap = false
                                         )
                                     }
                                     Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        FormatUtils.formatInr(cashBalance),
+                                    com.example.ui.components.AutoSizeSingleLineText(
+                                        text = FormatUtils.formatInr(cashBalance),
                                         style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        minFontSizeSp = 10f
                                     )
                                 }
                             }
@@ -337,14 +342,17 @@ fun AccountsScreen(viewModel: FinanceViewModel, navController: NavController) {
                                         Text(
                                             "Bank",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            softWrap = false
                                         )
                                     }
                                     Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        FormatUtils.formatInr(bankBalance),
+                                    com.example.ui.components.AutoSizeSingleLineText(
+                                        text = FormatUtils.formatInr(bankBalance),
                                         style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        minFontSizeSp = 10f
                                     )
                                 }
                             }
@@ -367,14 +375,17 @@ fun AccountsScreen(viewModel: FinanceViewModel, navController: NavController) {
                                         Text(
                                             "UPI",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            softWrap = false
                                         )
                                     }
                                     Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        FormatUtils.formatInr(upiBalance),
+                                    com.example.ui.components.AutoSizeSingleLineText(
+                                        text = FormatUtils.formatInr(upiBalance),
                                         style = MaterialTheme.typography.titleSmall,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        minFontSizeSp = 10f
                                     )
                                 }
                             }
@@ -1050,11 +1061,66 @@ fun TransferDialog(
         )
     }
 
+    fun submitTransferDialog() {
+        val amount = amountStr.toDoubleOrNull()
+        if (amount == null || amount <= 0.0) {
+            amountError = "Amount must be greater than ₹0"
+            return
+        }
+        if (toAccount.isBlank() || fromAccount == toAccount) {
+            transferError = "Please select distinct From and To accounts"
+            return
+        }
+
+        val srcType = AccountType.fromId(srcAccountObj?.type)
+        if ((srcType == AccountType.CASH || srcType == AccountType.BANK) && (srcBalance - amount < 0.0)) {
+            showNegativeOverrideWarning = true
+            return
+        }
+
+        onTransfer(amount, fromAccount, toAccount)
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Transfer Between Accounts", fontWeight = FontWeight.Bold) },
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                    Spacer(Modifier.width(4.dp))
+                    Text("Transfer Money", fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+                Spacer(Modifier.width(8.dp))
+                Button(
+                    onClick = { submitTransferDialog() },
+                    shape = RoundedCornerShape(10.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                ) {
+                    Icon(Icons.Default.Check, contentDescription = "Save Transfer", modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Save", fontWeight = FontWeight.Bold, maxLines = 1)
+                }
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
                 Text(
                     "Move money between your accounts (e.g., ATM cash withdrawal, bank deposit). Transfers do not count as income or expense in reports.",
                     style = MaterialTheme.typography.bodySmall,
@@ -1143,33 +1209,19 @@ fun TransferDialog(
         },
         confirmButton = {
             Button(
-                onClick = {
-                    val amount = amountStr.toDoubleOrNull()
-                    if (amount == null || amount <= 0.0) {
-                        amountError = "Amount must be greater than ₹0"
-                        return@Button
-                    }
-                    if (toAccount.isBlank() || fromAccount == toAccount) {
-                        transferError = "Please select distinct From and To accounts"
-                        return@Button
-                    }
-
-                    val srcType = AccountType.fromId(srcAccountObj?.type)
-                    if ((srcType == AccountType.CASH || srcType == AccountType.BANK) && (srcBalance - amount < 0.0)) {
-                        showNegativeOverrideWarning = true
-                        return@Button
-                    }
-
-                    onTransfer(amount, fromAccount, toAccount)
-                },
+                onClick = { submitTransferDialog() },
                 modifier = Modifier.testTag("confirm_transfer_button")
             ) {
-                Text("Transfer")
+                Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Save Transfer", fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
             OutlinedButton(onClick = onDismiss) {
-                Text("Cancel")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Back")
             }
         }
     )

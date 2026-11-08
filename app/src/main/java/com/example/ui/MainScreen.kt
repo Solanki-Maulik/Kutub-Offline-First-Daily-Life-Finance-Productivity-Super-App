@@ -152,13 +152,11 @@ fun MainScreen(viewModel: FinanceViewModel) {
                                         )
                                     },
                                     label = {
-                                        Text(
+                                        com.example.ui.components.AutoSizeSingleLineText(
                                             text = screen.title,
-                                            fontSize = 11.sp,
+                                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
                                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            overflow = TextOverflow.Ellipsis
+                                            minFontSizeSp = 8.5f
                                         )
                                     },
                                     alwaysShowLabel = true,
@@ -268,5 +266,15 @@ private fun EcosystemNavHost(
         composable("habits") { HabitsScreen(viewModel, navController) }
         composable("investments") { InvestmentsScreen(viewModel, navController) }
         composable("document_vault") { DocumentVaultScreen(viewModel, navController) }
+        composable(
+            route = "daily_toolkit?tab={tab}",
+            arguments = listOf(navArgument("tab") { type = NavType.IntType; defaultValue = 0 })
+        ) { backStackEntry ->
+            val tab = backStackEntry.arguments?.getInt("tab") ?: 0
+            DailyToolkitScreen(viewModel = viewModel, navController = navController, initialTab = tab)
+        }
+        composable("daily_toolkit") {
+            DailyToolkitScreen(viewModel = viewModel, navController = navController, initialTab = 0)
+        }
     }
 }
