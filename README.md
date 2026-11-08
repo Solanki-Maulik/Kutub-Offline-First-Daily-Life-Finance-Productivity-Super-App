@@ -1,5 +1,9 @@
 # Kutub (કુટુંબ) — Offline-First Daily Life, Finance & Productivity Super-App
 
+<p align="center">
+  <img src="./assets/kutub_logo.png" width="220" alt="Kutub — money • goals • habits • tasks" />
+</p>
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](./LICENSE)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android%207.0%2B%20(API%2024%2B)-3DDC84.svg)](https://developer.android.com)
 [![UI: Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20(Material%203)-4285F4.svg)](https://developer.android.com/jetpack/compose)
@@ -31,9 +35,9 @@
 - **Automatic Habit Streak Sync**: Completing a meditation session automatically checks off your **Meditation Habit** for today and logs your peaceful minutes.
 
 ### 2. ⛽ Vehicle Fuel & Mileage (`km/L`) Tracker (`VEHICLE_FUEL`)
-- **Real Mileage (`km/L`) & Running Cost (`₹/km`)**: Log your vehicle name (Bike, Scooter, Car), current odometer reading (`km`), fuel paid (`₹`), and fuel rate (`₹/L`).
-- **Auto-Computed Litres & Efficiency**: Automatically computes fuel volume (`L`), compares against the previous odometer reading for that vehicle to calculate exact **`km/L` mileage** and **`₹/km` running cost**, and tracks lifetime fuel spend.
-- **Next Service Odometer Alert**: Shows remaining kilometres until your next scheduled service and warns when maintenance is due.
+- **Real-Life Petrol Pump "Save Draft" Workflow**: At the petrol pump, simply enter **Fuel Paid (`₹`)** and **Fuel Rate (`₹/L`)** (with optional **Start Odo (`km`)**) and tap **Save Draft**—no need to know your future odometer reading on the spot.
+- **Editable Odometer Days/Weeks Later**: On your next refill days or weeks later, tap **Edit Odo** on your saved entry, enter your **Start Odo (`km`)** and **Next / End Odo (`km`)**, and tap **Update Fuel & Mileage** to compute exact **`km/L` mileage**, **distance driven (`km`)**, and **`₹/km` running cost**.
+- **Auto-Computed Litres & Multi-Fill Efficiency**: Automatically computes fuel volume (`L`), supports both single-entry odometer ranges (`Start Odo → End Odo`) and consecutive fill-up comparisons, and tracks lifetime fuel spend.
 - **1-Tap Ledger Sync**: Automatically logs each fuel fill-up as a **Transport** expense in your Money Ledger.
 
 ### 3. 🛡️ Safe-to-Spend Today & Subscription Renewal Radar (`SAFE_SPEND_SUBS`)
@@ -54,6 +58,15 @@
 
 ---
 
+## 📚 Project Documentation (`docs/`)
+
+Detailed documentation is organized in the [`docs/`](./docs) folder:
+- 📖 [**Complete Features Guide (`docs/FEATURES.md`)**](./docs/FEATURES.md) — Deep dive into all financial, productivity, offline AI, and Daily Toolkit modules.
+- 🔒 [**Security, Privacy & Anti-Spam Architecture (`docs/SECURITY_AND_PRIVACY.md`)**](./docs/SECURITY_AND_PRIVACY.md) — Offline-first storage, zero-key repository safety, permissions, and Google Sheet anti-spam security.
+- 🤝 [**Open Source, Release & Contributing Guide (`docs/OPEN_SOURCE_AND_CONTRIBUTING.md`)**](./docs/OPEN_SOURCE_AND_CONTRIBUTING.md) — MIT License, building from source, publishing GitHub APK releases, and portfolio guide.
+
+---
+
 ## 💰 Core Ecosystem Modules
 
 | Module | Key Capabilities |
@@ -63,7 +76,7 @@
 | **Tasks & Priorities** | Manage daily tasks with High/Medium/Low priorities, interactive Material 3 Date & Clock pickers, edit support, and active task completion streaks. |
 | **Daily Schedule & Timetable** | Plan time-blocked events (`Start Time – End Time`) with Daily/Weekly recurrence and quick time pickers. |
 | **Habits & Streak Tracker** | Build daily habits with 1-tap check-in, current/best streak calculation, and automatic Meditation timer integration. |
-| **Notes & Knowledge Vault** | Capture quick notes, checklists, and ideas with instant search and action-item extraction. |
+| **Notes & Knowledge Vault** | Capture quick notes, checklists, and ideas, attach notes to a **Transaction**, **Person**, or **Task** with responsive single-line buttons, and convert checklist items into tasks. |
 | **Backup & CSV Export** | Export transactions to CSV or create/restore full local JSON backups on your device. |
 
 ---

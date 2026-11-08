@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,13 +28,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import com.example.R
 import com.example.utils.FeedbackValidationOutcome
 import com.example.utils.FormatUtils
 import com.example.utils.SupportAndFeedbackUtils
@@ -68,23 +72,17 @@ fun HomeQuickGuideBanner(
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(
+                    Image(
+                        painter = painterResource(id = R.drawable.kutub_launcher_icon),
+                        contentDescription = "Kutub Logo",
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .size(32.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            Icons.Default.Lightbulb,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                            .size(36.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                    )
                     Column(modifier = Modifier.weight(1f)) {
                         AutoSizeSingleLineText(
                             text = "Welcome to Kutub (કુટુંબ) — Quick Guide",
@@ -197,8 +195,8 @@ fun AppQuickGuideDialog(
             ),
             GuideStepInfo(
                 icon = Icons.Default.LocalGasStation,
-                title = "3. Vehicle Fuel & Real Mileage (km/L)",
-                description = "Enter your odometer reading (km), fuel amount (₹), and rate (₹/L). Kutub auto-calculates litres, exact km/L mileage between fill-ups, ₹/km running cost, and next service alerts.",
+                title = "3. Vehicle Fuel Draft & Real Mileage (km/L)",
+                description = "At the petrol pump, enter Fuel Paid (₹) & Rate (₹/L) and tap 'Save Draft'. Days or weeks later on your next refill, tap 'Edit Odo' on that entry to enter your new odometer reading and calculate exact km/L mileage & ₹/km cost.",
                 badge = "Personal Favorite"
             ),
             GuideStepInfo(
@@ -254,6 +252,14 @@ fun AppQuickGuideDialog(
                         ) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
+                        Image(
+                            painter = painterResource(id = R.drawable.kutub_launcher_icon),
+                            contentDescription = "Kutub Logo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(34.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                        )
                         Column(modifier = Modifier.weight(1f)) {
                             AutoSizeSingleLineText(
                                 text = "Kutub (કુટુંબ) — Quick Start Guide",

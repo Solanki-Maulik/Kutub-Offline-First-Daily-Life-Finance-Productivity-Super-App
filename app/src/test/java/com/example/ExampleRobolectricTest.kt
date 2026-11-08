@@ -112,7 +112,24 @@ class ExampleRobolectricTest {
         assertEquals(210.0, mileageStats.totalDistanceKm, 0.01)
         assertEquals(52.5, mileageStats.averageKmPerLitre, 0.01)
         assertEquals(384.0 / 210.0, mileageStats.costPerKmInr, 0.01)
-        assertEquals(2390.0, mileageStats.kmUntilNextService ?: 0.0, 0.01)
+
+        // Verify Single-Entry Draft -> Later Odometer Edit Mileage Calculation
+        val singleDraftEdited = listOf(
+            com.example.utils.FuelLogEntry(
+                id = 10L,
+                vehicleName = "Honda Activa",
+                odometerKm = 15000.0,
+                endOdometerKm = 15160.0,
+                litres = 3.2,
+                totalCostInr = 320.0,
+                pricePerLitre = 100.0,
+                isDraft = false
+            )
+        )
+        val editedDraftStats = com.example.utils.DailyToolkitUtils.computeVehicleMileageStats(singleDraftEdited)
+        assertEquals(160.0, editedDraftStats.totalDistanceKm, 0.01)
+        assertEquals(50.0, editedDraftStats.averageKmPerLitre, 0.01)
+        assertEquals(2.0, editedDraftStats.costPerKmInr, 0.01)
 
         // Verify Live Meditation Countdown & 4-4-6 Breathing Pacer
         assertEquals("10:00", com.example.utils.DailyToolkitUtils.formatTimerMmSs(600))

@@ -14,12 +14,14 @@ data class FuelLogEntry(
     val id: Long = System.currentTimeMillis(),
     val vehicleName: String = "My Bike / Car",
     val odometerKm: Double,
+    val endOdometerKm: Double = 0.0,
     val litres: Double,
     val totalCostInr: Double,
     val pricePerLitre: Double = if (litres > 0.0) totalCostInr / litres else 100.0,
     val account: String = "Cash",
     val dateMillis: Long = System.currentTimeMillis(),
     val nextServiceKm: Double = 0.0,
+    val isDraft: Boolean = false,
     val note: String = ""
 )
 
@@ -149,13 +151,22 @@ object DailyToolkitUtils {
         var totalMeasuredCost = 0.0
 
         byVehicle.values.forEach { vehicleLogs ->
-            val sorted = vehicleLogs.sortedBy { it.odometerKm }
+            val sorted = vehicleLogs.sortedWith(compareBy({ if (it.odometerKm > 0.0) it.odometerKm else Double.MAX_VALUE }, { it.dateMillis }))
             for (i in sorted.indices) {
                 val current = sorted[i]
                 val prev = if (i > 0) sorted[i - 1] else null
-                val dist = if (prev != null && current.odometerKm > prev.odometerKm) {
-                    current.odometerKm - prev.odometerKm
-                } else null
+
+                // Support both direct Start->End Odometer on a single entry (edited after a few days/weeks)
+                // AND consecutive fill-up odometer readings
+                val dist = when {
+                    current.endOdometerKm > current.odometerKm && current.odometerKm > 0.0 -> {
+                        current.endOdometerKm - current.odometerKm
+                    }
+                    prev != null && prev.odometerKm > 0.0 && current.odometerKm > prev.odometerKm -> {
+                        current.odometerKm - prev.odometerKm
+                    }
+                    else -> null
+                }
 
                 val kmPerL = if (dist != null && dist > 0.0 && current.litres > 0.0) {
                     dist / current.litres
@@ -188,7 +199,7 @@ object DailyToolkitUtils {
             totalMeasuredCost / totalMeasuredDistance
         } else 0.0
 
-        val latestOdo = filtered.maxOfOrNull { it.odometerKm } ?: 0.0
+        val latestOdo = filtered.maxOfOrNull { max(it.odometerKm, it.endOdometerKm) } ?: 0.0
         val nextServiceTarget = filtered.mapNotNull { it.nextServiceKm.takeIf { km -> km > 0.0 } }.maxOrNull() ?: 0.0
         val kmUntilService = if (nextServiceTarget > 0.0 && latestOdo > 0.0) {
             nextServiceTarget - latestOdo
@@ -487,12 +498,14 @@ object DailyToolkitUtils {
                             id = o.optLong("id", System.currentTimeMillis() + i),
                             vehicleName = o.optString("vehicleName", "My Vehicle"),
                             odometerKm = o.optDouble("odometerKm", 0.0),
+                            endOdometerKm = o.optDouble("endOdometerKm", 0.0),
                             litres = o.optDouble("litres", 0.0),
                             totalCostInr = o.optDouble("totalCostInr", 0.0),
                             pricePerLitre = o.optDouble("pricePerLitre", 96.0),
                             account = o.optString("account", "Cash"),
                             dateMillis = o.optLong("dateMillis", System.currentTimeMillis()),
                             nextServiceKm = o.optDouble("nextServiceKm", 0.0),
+                            isDraft = o.optBoolean("isDraft", false),
                             note = o.optString("note", "")
                         )
                     )
@@ -511,12 +524,14 @@ object DailyToolkitUtils {
                     put("id", item.id)
                     put("vehicleName", item.vehicleName)
                     put("odometerKm", item.odometerKm)
+                    put("endOdometerKm", item.endOdometerKm)
                     put("litres", item.litres)
                     put("totalCostInr", item.totalCostInr)
                     put("pricePerLitre", item.pricePerLitre)
                     put("account", item.account)
                     put("dateMillis", item.dateMillis)
                     put("nextServiceKm", item.nextServiceKm)
+                    put("isDraft", item.isDraft)
                     put("note", item.note)
                 }
             )

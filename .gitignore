@@ -21,3 +21,6 @@ local.properties
 debug.keystore
 *.jks
 *-debug.log
+.aistudio/
+/public/
+

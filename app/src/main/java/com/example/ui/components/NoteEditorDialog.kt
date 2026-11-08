@@ -573,7 +573,10 @@ fun NoteEditorDialog(
                                 containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.35f)
                             )
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -581,7 +584,8 @@ fun NoteEditorDialog(
                                 ) {
                                     Row(
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.weight(1f)
                                     ) {
                                         Icon(
                                             Icons.Default.AttachFile,
@@ -589,20 +593,34 @@ fun NoteEditorDialog(
                                             modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.primary
                                         )
-                                        Text(
-                                            "Attach to Transaction, Person, or Task",
+                                        AutoSizeSingleLineText(
+                                            text = "Attach Transaction, Person, or Task",
                                             style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.Bold
+                                            fontWeight = FontWeight.Bold,
+                                            minFontSizeSp = 10f
                                         )
                                     }
                                     if (attachedType != null) {
-                                        TextButton(onClick = {
-                                            hasUserEdited = true
-                                            attachedType = null
-                                            attachedId = null
-                                            attachedTitle = null
-                                        }) {
-                                            Text("Clear")
+                                        Spacer(Modifier.width(6.dp))
+                                        FilledTonalButton(
+                                            onClick = {
+                                                hasUserEdited = true
+                                                attachedType = null
+                                                attachedId = null
+                                                attachedTitle = null
+                                                showAttachSelector = false
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                            shape = RoundedCornerShape(10.dp),
+                                            modifier = Modifier.height(32.dp)
+                                        ) {
+                                            Text(
+                                                "Clear",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                softWrap = false
+                                            )
                                         }
                                     }
                                 }
@@ -611,9 +629,7 @@ fun NoteEditorDialog(
                                     Surface(
                                         shape = RoundedCornerShape(10.dp),
                                         color = MaterialTheme.colorScheme.primaryContainer,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 6.dp)
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Row(
                                             modifier = Modifier.padding(10.dp),
@@ -629,7 +645,7 @@ fun NoteEditorDialog(
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp)
                                             )
-                                            Text(
+                                            AutoSizeSingleLineText(
                                                 text = "$attachedType: $attachedTitle",
                                                 style = MaterialTheme.typography.bodyMedium,
                                                 fontWeight = FontWeight.SemiBold
@@ -644,35 +660,73 @@ fun NoteEditorDialog(
                                 ) {
                                     OutlinedButton(
                                         onClick = {
-                                            attachedType = "TRANSACTION"
-                                            showAttachSelector = true
+                                            if (attachedType == "TRANSACTION" && showAttachSelector) {
+                                                showAttachSelector = false
+                                            } else {
+                                                attachedType = "TRANSACTION"
+                                                showAttachSelector = true
+                                            }
                                         },
-                                        modifier = Modifier.weight(1f)
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(38.dp)
                                     ) {
-                                        Text("Transaction", fontSize = 11.sp)
+                                        AutoSizeSingleLineText(
+                                            text = "Transaction",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            minFontSizeSp = 9f
+                                        )
                                     }
                                     OutlinedButton(
                                         onClick = {
-                                            attachedType = "PERSON"
-                                            showAttachSelector = true
+                                            if (attachedType == "PERSON" && showAttachSelector) {
+                                                showAttachSelector = false
+                                            } else {
+                                                attachedType = "PERSON"
+                                                showAttachSelector = true
+                                            }
                                         },
-                                        modifier = Modifier.weight(1f)
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(38.dp)
                                     ) {
-                                        Text("Person", fontSize = 11.sp)
+                                        AutoSizeSingleLineText(
+                                            text = "Person",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            minFontSizeSp = 9f
+                                        )
                                     }
                                     OutlinedButton(
                                         onClick = {
-                                            attachedType = "TASK"
-                                            showAttachSelector = true
+                                            if (attachedType == "TASK" && showAttachSelector) {
+                                                showAttachSelector = false
+                                            } else {
+                                                attachedType = "TASK"
+                                                showAttachSelector = true
+                                            }
                                         },
-                                        modifier = Modifier.weight(1f)
+                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(38.dp)
                                     ) {
-                                        Text("Task", fontSize = 11.sp)
+                                        AutoSizeSingleLineText(
+                                            text = "Task",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.SemiBold,
+                                            minFontSizeSp = 9f
+                                        )
                                     }
                                 }
 
                                 if (showAttachSelector) {
-                                    Spacer(Modifier.height(8.dp))
                                     when (attachedType) {
                                         "TRANSACTION" -> {
                                             if (transactions.isEmpty()) {
@@ -680,16 +734,25 @@ fun NoteEditorDialog(
                                             } else {
                                                 transactions.take(6).forEach { tx ->
                                                     val label = "${tx.category} (${FormatUtils.formatInr(tx.amount)}) - ${FormatUtils.formatDate(tx.timestamp)}"
-                                                    TextButton(
-                                                        onClick = {
-                                                            hasUserEdited = true
-                                                            attachedId = tx.id.toLong()
-                                                            attachedTitle = label
-                                                            showAttachSelector = false
-                                                        },
-                                                        modifier = Modifier.fillMaxWidth()
+                                                    Surface(
+                                                        shape = RoundedCornerShape(10.dp),
+                                                        color = MaterialTheme.colorScheme.surface,
+                                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clickable {
+                                                                hasUserEdited = true
+                                                                attachedId = tx.id.toLong()
+                                                                attachedTitle = label
+                                                                showAttachSelector = false
+                                                            }
                                                     ) {
-                                                        Text(label, modifier = Modifier.fillMaxWidth())
+                                                        Text(
+                                                            text = label,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            fontWeight = FontWeight.Medium,
+                                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                                        )
                                                     }
                                                 }
                                             }
@@ -699,16 +762,25 @@ fun NoteEditorDialog(
                                                 Text("No people in Udhaar ledger yet.", style = MaterialTheme.typography.bodySmall)
                                             } else {
                                                 people.take(8).forEach { p ->
-                                                    TextButton(
-                                                        onClick = {
-                                                            hasUserEdited = true
-                                                            attachedId = p.id
-                                                            attachedTitle = p.name
-                                                            showAttachSelector = false
-                                                        },
-                                                        modifier = Modifier.fillMaxWidth()
+                                                    Surface(
+                                                        shape = RoundedCornerShape(10.dp),
+                                                        color = MaterialTheme.colorScheme.surface,
+                                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clickable {
+                                                                hasUserEdited = true
+                                                                attachedId = p.id
+                                                                attachedTitle = p.name
+                                                                showAttachSelector = false
+                                                            }
                                                     ) {
-                                                        Text(p.name, modifier = Modifier.fillMaxWidth())
+                                                        Text(
+                                                            text = p.name,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            fontWeight = FontWeight.Medium,
+                                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                                        )
                                                     }
                                                 }
                                             }
@@ -718,16 +790,25 @@ fun NoteEditorDialog(
                                                 Text("No tasks created yet.", style = MaterialTheme.typography.bodySmall)
                                             } else {
                                                 tasks.take(8).forEach { t ->
-                                                    TextButton(
-                                                        onClick = {
-                                                            hasUserEdited = true
-                                                            attachedId = t.id
-                                                            attachedTitle = t.title
-                                                            showAttachSelector = false
-                                                        },
-                                                        modifier = Modifier.fillMaxWidth()
+                                                    Surface(
+                                                        shape = RoundedCornerShape(10.dp),
+                                                        color = MaterialTheme.colorScheme.surface,
+                                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .clickable {
+                                                                hasUserEdited = true
+                                                                attachedId = t.id
+                                                                attachedTitle = t.title
+                                                                showAttachSelector = false
+                                                            }
                                                     ) {
-                                                        Text(t.title, modifier = Modifier.fillMaxWidth())
+                                                        Text(
+                                                            text = t.title,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            fontWeight = FontWeight.Medium,
+                                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                                                        )
                                                     }
                                                 }
                                             }
@@ -738,34 +819,7 @@ fun NoteEditorDialog(
                         }
                     }
 
-                    item { Spacer(Modifier.height(24.dp)) }
-                }
-
-                // Bottom Action Bar
-                Surface(
-                    tonalElevation = 8.dp,
-                    color = MaterialTheme.colorScheme.surface
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        Button(
-                            onClick = {
-                                if (title.isNotBlank() || content.isNotBlank() || checklists.isNotEmpty()) {
-                                    onAutoSave(buildCurrentNote()) {}
-                                }
-                                onDismiss()
-                            },
-                            modifier = Modifier.testTag("note_done_btn")
-                        ) {
-                            Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Done")
-                        }
-                    }
+                    item { Spacer(Modifier.height(16.dp)) }
                 }
             }
         }

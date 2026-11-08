@@ -686,7 +686,7 @@ private fun MeditationCountdownSection(
 }
 
 // ============================================================================
-// TAB 2: VEHICLE FUEL MILEAGE & SERVICE TRACKER
+// TAB 2: VEHICLE FUEL MILEAGE TRACKER (REAL-LIFE DRAFT & EDIT WORKFLOW)
 // ============================================================================
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -699,11 +699,12 @@ private fun VehicleFuelTrackerSection(
 ) {
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
 
+    var editingEntryId by remember { mutableStateOf<Long?>(null) }
     var vehicleName by remember { mutableStateOf("Honda Activa") }
     var odometerInput by remember { mutableStateOf("") }
+    var endOdometerInput by remember { mutableStateOf("") }
     var totalCostInput by remember { mutableStateOf("") }
     var pricePerLitreInput by remember { mutableStateOf("96") }
-    var nextServiceKmInput by remember { mutableStateOf("15000") }
     var selectedAccount by remember(accounts) {
         mutableStateOf(accounts.firstOrNull()?.name ?: "Cash")
     }
@@ -718,6 +719,100 @@ private fun VehicleFuelTrackerSection(
         val cost = totalCostInput.toDoubleOrNull() ?: 0.0
         val ppl = pricePerLitreInput.toDoubleOrNull() ?: 0.0
         if (cost > 0.0 && ppl > 0.0) cost / ppl else 0.0
+    }
+
+    val livePreviewKmPerLitre = remember(odometerInput, endOdometerInput, computedLitres) {
+        val start = odometerInput.toDoubleOrNull() ?: 0.0
+        val end = endOdometerInput.toDoubleOrNull() ?: 0.0
+        if (end > start && start > 0.0 && computedLitres > 0.0) {
+            (end - start) / computedLitres
+        } else null
+    }
+
+    fun resetForm() {
+        editingEntryId = null
+        odometerInput = ""
+        endOdometerInput = ""
+        totalCostInput = ""
+        noteInput = ""
+    }
+
+    fun saveFuelRecord(saveAsDraft: Boolean) {
+        val startOdo = odometerInput.toDoubleOrNull() ?: 0.0
+        val endOdo = endOdometerInput.toDoubleOrNull() ?: 0.0
+        val cost = totalCostInput.toDoubleOrNull() ?: 0.0
+        val rate = (pricePerLitreInput.toDoubleOrNull() ?: 96.0).coerceAtLeast(1.0)
+        val litres = if (cost > 0.0) cost / rate else 0.0
+
+        if (cost <= 0.0) {
+            onShowMessage("Please enter Fuel Paid (₹) amount first.")
+            return
+        }
+
+        val isEditing = editingEntryId != null
+        val targetId = editingEntryId ?: System.currentTimeMillis()
+        val existingEntry = fuelLogs.find { it.id == targetId }
+
+        // Entry is marked draft if saved via "Save Draft" or if End Odo isn't known yet
+        val draftFlag = saveAsDraft || (startOdo <= 0.0) || (endOdo <= 0.0 && !isEditing)
+
+        val updatedEntry = FuelLogEntry(
+            id = targetId,
+            vehicleName = vehicleName.trim().ifBlank { "My Vehicle" },
+            odometerKm = startOdo,
+            endOdometerKm = endOdo,
+            litres = litres,
+            totalCostInr = cost,
+            pricePerLitre = rate,
+            account = selectedAccount,
+            dateMillis = existingEntry?.dateMillis ?: System.currentTimeMillis(),
+            nextServiceKm = 0.0,
+            isDraft = draftFlag && endOdo <= startOdo,
+            note = noteInput.trim().ifBlank {
+                if (draftFlag && endOdo <= startOdo) {
+                    "Fuel draft (${String.format(Locale.US, "%.2f", litres)}L) — Update Odo on next refill"
+                } else {
+                    "Fuel fill-up (${String.format(Locale.US, "%.2f", litres)}L)"
+                }
+            }
+        )
+
+        val updatedList = if (isEditing) {
+            fuelLogs.map { if (it.id == targetId) updatedEntry else it }
+        } else {
+            listOf(updatedEntry) + fuelLogs
+        }
+        onUpdateLogs(updatedList)
+
+        if (!isEditing && alsoLogToMoneyLedger) {
+            viewModel.restoreTransaction(
+                Transaction(
+                    amount = cost,
+                    isIncome = false,
+                    category = "Transport",
+                    account = selectedAccount,
+                    paymentMethod = selectedAccount,
+                    note = buildString {
+                        append("${updatedEntry.vehicleName} Fuel (${String.format(Locale.US, "%.2f", litres)}L")
+                        if (startOdo > 0.0) append(", Odo ${startOdo.toInt()} km")
+                        append(")")
+                    },
+                    timestamp = updatedEntry.dateMillis
+                )
+            )
+        }
+
+        val msg = when {
+            isEditing && endOdo > startOdo && startOdo > 0.0 -> {
+                val kml = (endOdo - startOdo) / litres.coerceAtLeast(0.01)
+                "Updated Odometer! Calculated Mileage: ${String.format(Locale.US, "%.1f km/L", kml)}"
+            }
+            isEditing -> "Fuel entry updated!"
+            saveAsDraft -> "Saved as Draft! Tap 'Edit / Update Odo' after a few days when you check your odometer."
+            else -> "Saved fuel fill-up for ${updatedEntry.vehicleName}!"
+        }
+        resetForm()
+        onShowMessage(msg)
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
@@ -769,61 +864,67 @@ private fun VehicleFuelTrackerSection(
             }
         }
 
-        // Next Service Odometer Banner
-        stats.kmUntilNextService?.let { kmLeft ->
-            val isDueSoon = kmLeft <= 300.0
-            Surface(
-                color = if (isDueSoon) Color(0xFFFFEBEE) else Color(0xFFE8F5E9),
-                border = BorderStroke(1.dp, if (isDueSoon) Color(0xFFEF9A9A) else Color(0xFFA5D6A7)),
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
+        // Real-Life Petrol Pump Workflow Tip
+        Surface(
+            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f),
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(
-                        Icons.Default.BuildCircle,
-                        contentDescription = null,
-                        tint = if (isDueSoon) Color(0xFFC62828) else Color(0xFF2E7D32)
-                    )
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (kmLeft <= 0) "Vehicle Service Due Now! (Target: ${stats.nextServiceDueKm.toInt()} km)"
-                            else "Next Service in ${kmLeft.toInt()} km (at ${stats.nextServiceDueKm.toInt()} km)",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isDueSoon) Color(0xFFB71C1C) else Color(0xFF1B5E20)
-                        )
-                        Text(
-                            text = "Latest Odometer: ${stats.latestOdometerKm.toInt()} km",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = if (isDueSoon) Color(0xFFC62828) else Color(0xFF2E7D32)
-                        )
-                    }
-                }
+                Icon(
+                    Icons.Default.LocalGasStation,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "At the petrol pump? Just enter ₹ Paid & tap 'Save Draft'. After a few days/weeks when you refill again, tap 'Edit Odo' below to enter your new km reading and get exact km/L!",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
-        // Add Fuel Fill-Up Card
+        // Add or Edit Fuel Fill-Up Card
         Card(
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("vehicle_fuel_form_card"),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            border = BorderStroke(
+                width = if (editingEntryId != null) 2.dp else 1.dp,
+                color = if (editingEntryId != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+            ),
             shape = RoundedCornerShape(20.dp)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Text(
-                    "Log Fuel Fill-Up & Calculate Mileage",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    AutoSizeSingleLineText(
+                        text = if (editingEntryId != null) "Editing Fuel Entry — Update Odo (km)" else "Log Fuel Fill-Up (Save Draft or Full)",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (editingEntryId != null) {
+                        TextButton(
+                            onClick = { resetForm() },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                        ) {
+                            Text("Cancel Edit", maxLines = 1)
+                        }
+                    }
+                }
 
                 // Quick Vehicle Selector
                 Row(
@@ -836,40 +937,18 @@ private fun VehicleFuelTrackerSection(
                         FilterChip(
                             selected = vehicleName.equals(v, ignoreCase = true),
                             onClick = { vehicleName = v },
-                            label = { Text(v) }
+                            label = { Text(v, maxLines = 1) }
                         )
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = vehicleName,
-                        onValueChange = { vehicleName = it },
-                        label = { Text("Vehicle Name") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    OutlinedTextField(
-                        value = odometerInput,
-                        onValueChange = { odometerInput = it },
-                        label = { Text("Odometer (km)") },
-                        placeholder = { Text("e.g. ${(stats.latestOdometerKm + 180).toInt()}") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                        singleLine = true,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("fuel_odometer_input"),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                }
-
+                // Row 1: Fuel Paid (₹) + Rate (₹/L) -> Auto Litres
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = totalCostInput,
                         onValueChange = { totalCostInput = it },
-                        label = { Text("Fuel Paid (₹)") },
-                        placeholder = { Text("e.g. 300") },
+                        label = { Text("Fuel Paid (₹) *") },
+                        placeholder = { Text("e.g. 200") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         singleLine = true,
                         modifier = Modifier
@@ -888,15 +967,43 @@ private fun VehicleFuelTrackerSection(
                     )
                 }
 
+                // Row 2: Start Odometer (km) + Next / End Odometer (km — Optional / Fill Later!)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = odometerInput,
+                        onValueChange = { odometerInput = it },
+                        label = { Text("Start Odo (km)") },
+                        placeholder = { Text("At pump (optional)") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("fuel_odometer_input"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                    OutlinedTextField(
+                        value = endOdometerInput,
+                        onValueChange = { endOdometerInput = it },
+                        label = { Text("Next / End Odo (km)") },
+                        placeholder = { Text("Fill after few days") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true,
+                        modifier = Modifier
+                            .weight(1f)
+                            .testTag("fuel_end_odometer_input"),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+
+                // Row 3: Vehicle Name + Auto Litres / Live Mileage Preview
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
-                        value = nextServiceKmInput,
-                        onValueChange = { nextServiceKmInput = it },
-                        label = { Text("Next Service Odometer (km)") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        value = vehicleName,
+                        onValueChange = { vehicleName = it },
+                        label = { Text("Vehicle Name") },
                         singleLine = true,
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(12.dp)
@@ -907,9 +1014,16 @@ private fun VehicleFuelTrackerSection(
                         modifier = Modifier.weight(1f)
                     ) {
                         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-                            Text("Auto Litres", style = MaterialTheme.typography.labelSmall)
                             Text(
-                                text = String.format(Locale.US, "%.2f Litres", computedLitres),
+                                text = if (livePreviewKmPerLitre != null) "Auto Litres & Mileage" else "Auto Calculated Fuel",
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                            AutoSizeSingleLineText(
+                                text = if (livePreviewKmPerLitre != null) {
+                                    String.format(Locale.US, "%.2fL • %.1f km/L", computedLitres, livePreviewKmPerLitre)
+                                } else {
+                                    String.format(Locale.US, "%.2f Litres", computedLitres)
+                                },
                                 style = MaterialTheme.typography.titleSmall,
                                 fontWeight = FontWeight.Bold
                             )
@@ -917,78 +1031,78 @@ private fun VehicleFuelTrackerSection(
                     }
                 }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Checkbox(
-                        checked = alsoLogToMoneyLedger,
-                        onCheckedChange = { alsoLogToMoneyLedger = it }
-                    )
-                    Text(
-                        "Also save ₹${totalCostInput.ifBlank { "0" }} as a Transport Expense in Money Ledger ($selectedAccount)",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                if (editingEntryId == null) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Checkbox(
+                            checked = alsoLogToMoneyLedger,
+                            onCheckedChange = { alsoLogToMoneyLedger = it }
+                        )
+                        Text(
+                            "Also save ₹${totalCostInput.ifBlank { "0" }} as a Transport Expense in Money Ledger ($selectedAccount)",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
 
-                Button(
-                    onClick = {
-                        val odo = odometerInput.toDoubleOrNull() ?: 0.0
-                        val cost = totalCostInput.toDoubleOrNull() ?: 0.0
-                        val rate = (pricePerLitreInput.toDoubleOrNull() ?: 96.0).coerceAtLeast(1.0)
-                        val litres = cost / rate
-                        val nextSrv = nextServiceKmInput.toDoubleOrNull() ?: 0.0
-
-                        if (odo > 0.0 && cost > 0.0) {
-                            val newEntry = FuelLogEntry(
-                                id = System.currentTimeMillis(),
-                                vehicleName = vehicleName.trim().ifBlank { "My Vehicle" },
-                                odometerKm = odo,
-                                litres = litres,
-                                totalCostInr = cost,
-                                pricePerLitre = rate,
-                                account = selectedAccount,
-                                dateMillis = System.currentTimeMillis(),
-                                nextServiceKm = nextSrv,
-                                note = noteInput.trim().ifBlank { "Fuel fill-up (${String.format(Locale.US, "%.2f", litres)}L)" }
-                            )
-                            val updated = listOf(newEntry) + fuelLogs
-                            onUpdateLogs(updated)
-
-                            if (alsoLogToMoneyLedger) {
-                                viewModel.restoreTransaction(
-                                    Transaction(
-                                        amount = cost,
-                                        isIncome = false,
-                                        category = "Transport",
-                                        account = selectedAccount,
-                                        paymentMethod = selectedAccount,
-                                        note = "${newEntry.vehicleName} Fuel (${odo.toInt()} km, ${String.format(Locale.US, "%.2f", litres)}L)",
-                                        timestamp = newEntry.dateMillis
-                                    )
-                                )
-                            }
-
-                            odometerInput = ""
-                            totalCostInput = ""
-                            noteInput = ""
-                            onShowMessage("Saved fuel fill-up for ${newEntry.vehicleName}!")
-                        }
-                    },
-                    enabled = (odometerInput.toDoubleOrNull() ?: 0.0) > 0.0 && (totalCostInput.toDoubleOrNull() ?: 0.0) > 0.0,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("fuel_save_btn"),
-                    shape = RoundedCornerShape(14.dp)
+                // Action Buttons Row (Single-Line Save Draft + Save/Update Entry)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.LocalGasStation, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Save Fuel Log & Compute Mileage", fontWeight = FontWeight.Bold)
+                    if (editingEntryId == null) {
+                        OutlinedButton(
+                            onClick = { saveFuelRecord(saveAsDraft = true) },
+                            enabled = (totalCostInput.toDoubleOrNull() ?: 0.0) > 0.0,
+                            modifier = Modifier
+                                .weight(0.46f)
+                                .height(46.dp)
+                                .testTag("fuel_save_draft_btn"),
+                            shape = RoundedCornerShape(12.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(Icons.Default.BookmarkBorder, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(4.dp))
+                            AutoSizeSingleLineText(
+                                text = "Save Draft",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                minFontSizeSp = 9.5f
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = { saveFuelRecord(saveAsDraft = false) },
+                        enabled = (totalCostInput.toDoubleOrNull() ?: 0.0) > 0.0,
+                        modifier = Modifier
+                            .weight(if (editingEntryId == null) 0.54f else 1f)
+                            .height(46.dp)
+                            .testTag("fuel_save_btn"),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                    ) {
+                        Icon(
+                            if (editingEntryId != null) Icons.Default.Check else Icons.Default.LocalGasStation,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        AutoSizeSingleLineText(
+                            text = if (editingEntryId != null) "Update Fuel & Mileage" else "Save Entry",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            minFontSizeSp = 9.5f
+                        )
+                    }
                 }
             }
         }
 
-        // Fill-Up History List with Calculated Mileage
+        // Fill-Up History List with Calculated Mileage & 1-Tap Edit Odometer
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -1000,64 +1114,139 @@ private fun VehicleFuelTrackerSection(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    "Fuel Fill-Up History (${stats.logsWithMileage.size})",
+                    "Fuel Fill-Up History & Drafts (${stats.logsWithMileage.size})",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold
                 )
                 stats.logsWithMileage.forEach { item ->
+                    val isBeingEdited = editingEntryId == item.entry.id
                     Surface(
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        color = if (isBeingEdited) {
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                        },
+                        border = if (item.entry.isDraft || item.calculatedKmPerLitre == null) {
+                            BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.35f))
+                        } else null,
                         shape = RoundedCornerShape(14.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        "${item.entry.vehicleName} • ${FormatUtils.formatInr(item.entry.totalCostInr)}",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                    if (item.calculatedKmPerLitre != null) {
-                                        Badge(containerColor = MaterialTheme.colorScheme.primaryContainer) {
-                                            Text(
-                                                String.format(Locale.US, "%.1f km/L", item.calculatedKmPerLitre),
-                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                                fontWeight = FontWeight.Bold
-                                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        AutoSizeSingleLineText(
+                                            text = "${item.entry.vehicleName} • ${FormatUtils.formatInr(item.entry.totalCostInr)}",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        if (item.calculatedKmPerLitre != null) {
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.primaryContainer
+                                            ) {
+                                                Text(
+                                                    String.format(Locale.US, "%.1f km/L", item.calculatedKmPerLitre),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    fontWeight = FontWeight.Bold,
+                                                    maxLines = 1
+                                                )
+                                            }
+                                        } else {
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.tertiaryContainer
+                                            ) {
+                                                Text(
+                                                    "Draft • Add Odo Later",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onTertiaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    maxLines = 1
+                                                )
+                                            }
                                         }
                                     }
+                                    Text(
+                                        buildString {
+                                            if (item.entry.odometerKm > 0.0) {
+                                                append("Start Odo: ${item.entry.odometerKm.toInt()} km")
+                                            } else {
+                                                append("Start Odo: Pending")
+                                            }
+                                            if (item.entry.endOdometerKm > 0.0) {
+                                                append(" -> End: ${item.entry.endOdometerKm.toInt()} km")
+                                            }
+                                            item.distanceSincePreviousKm?.let { append(" (+${it.toInt()} km)") }
+                                            append(" • ${String.format(Locale.US, "%.2f", item.entry.litres)}L")
+                                            item.runningCostPerKmInr?.let { append(" • ₹${String.format(Locale.US, "%.2f", it)}/km") }
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                                Text(
-                                    buildString {
-                                        append("Odo: ${item.entry.odometerKm.toInt()} km")
-                                        item.distanceSincePreviousKm?.let { append(" (+${it.toInt()} km)") }
-                                        append(" • ${String.format(Locale.US, "%.2f", item.entry.litres)}L")
-                                        item.runningCostPerKmInr?.let { append(" • ₹${String.format(Locale.US, "%.2f", it)}/km") }
-                                    },
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(
-                                onClick = {
-                                    onUpdateLogs(fuelLogs.filterNot { it.id == item.entry.id })
+
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    FilledTonalButton(
+                                        onClick = {
+                                            editingEntryId = item.entry.id
+                                            vehicleName = item.entry.vehicleName
+                                            totalCostInput = item.entry.totalCostInr.toInt().toString()
+                                            pricePerLitreInput = item.entry.pricePerLitre.toInt().toString()
+                                            odometerInput = if (item.entry.odometerKm > 0.0) item.entry.odometerKm.toInt().toString() else ""
+                                            endOdometerInput = if (item.entry.endOdometerKm > 0.0) item.entry.endOdometerKm.toInt().toString() else ""
+                                            noteInput = item.entry.note
+                                        },
+                                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                                        shape = RoundedCornerShape(10.dp),
+                                        modifier = Modifier
+                                            .height(34.dp)
+                                            .testTag("fuel_edit_btn_${item.entry.id}")
+                                    ) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit Fuel Entry", modifier = Modifier.size(14.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            "Edit Odo",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            softWrap = false
+                                        )
+                                    }
+
+                                    IconButton(
+                                        onClick = {
+                                            if (editingEntryId == item.entry.id) resetForm()
+                                            onUpdateLogs(fuelLogs.filterNot { it.id == item.entry.id })
+                                        },
+                                        modifier = Modifier.size(34.dp)
+                                    ) {
+                                        Icon(
+                                            Icons.Default.DeleteOutline,
+                                            contentDescription = "Delete Fuel Entry",
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
                                 }
-                            ) {
-                                Icon(
-                                    Icons.Default.DeleteOutline,
-                                    contentDescription = "Delete Fuel Entry",
-                                    modifier = Modifier.size(18.dp)
-                                )
                             }
                         }
                     }
