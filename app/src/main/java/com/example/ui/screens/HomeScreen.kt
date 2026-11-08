@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -171,9 +172,33 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
     var taskToEditFromHome by remember { mutableStateOf<com.example.data.TaskItem?>(null) }
     var eventToEditFromHome by remember { mutableStateOf<com.example.data.ScheduleEvent?>(null) }
     var showGlobalSearchDialog by remember { mutableStateOf(false) }
+    var showAppQuickGuideDialog by remember { mutableStateOf(false) }
+    var showBugReportDialog by remember { mutableStateOf(false) }
+    var showHomeGuideBanner by remember {
+        mutableStateOf(!prefs.getBoolean("dismissed_home_quick_guide_v1", false))
+    }
 
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
+
+    if (showAppQuickGuideDialog) {
+        AppQuickGuideDialog(
+            onDismiss = { showAppQuickGuideDialog = false },
+            onOpenBugReport = {
+                showAppQuickGuideDialog = false
+                showBugReportDialog = true
+            }
+        )
+    }
+
+    if (showBugReportDialog) {
+        BugReportAndFeedbackDialog(
+            onDismiss = { showBugReportDialog = false },
+            onShowMessage = { msg ->
+                coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
+            }
+        )
+    }
 
     if (showGlobalSearchDialog) {
         GlobalSearchDialog(
@@ -377,10 +402,26 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                     }
                 },
                 actions = {
+                    // Quick Guide (?) shortcut
+                    IconButton(
+                        onClick = { showAppQuickGuideDialog = true },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .testTag("home_quick_guide_top_btn")
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.HelpOutline,
+                            contentDescription = "App Quick Start Guide",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+
                     // Global Search across all modules
                     IconButton(
                         onClick = { showGlobalSearchDialog = true },
-                        modifier = Modifier.testTag("home_global_search_btn")
+                        modifier = Modifier
+                            .size(40.dp)
+                            .testTag("home_global_search_btn")
                     ) {
                         Icon(
                             Icons.Default.Search,
@@ -389,22 +430,12 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
                         )
                     }
 
-                    // Unified Today View shortcut
-                    IconButton(
-                        onClick = { navController.navigate("today_hub") },
-                        modifier = Modifier.testTag("home_unified_today_btn")
-                    ) {
-                        Icon(
-                            Icons.Default.Today,
-                            contentDescription = "Unified Today View",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-
                     // Privacy mode eye toggle
                     IconButton(
                         onClick = { viewModel.togglePrivacyMode() },
-                        modifier = Modifier.testTag("home_privacy_toggle")
+                        modifier = Modifier
+                            .size(40.dp)
+                            .testTag("home_privacy_toggle")
                     ) {
                         Icon(
                             if (privacyMode) Icons.Default.VisibilityOff else Icons.Default.Visibility,
@@ -449,6 +480,20 @@ fun HomeScreen(viewModel: FinanceViewModel, navController: NavController) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(top = 4.dp, bottom = 90.dp)
         ) {
+            // 0a. Quick Start Guide Banner (dismissible, or reopen anytime via '?' in top bar)
+            if (showHomeGuideBanner) {
+                item {
+                    HomeQuickGuideBanner(
+                        onOpenFullGuide = { showAppQuickGuideDialog = true },
+                        onOpenBugReport = { showBugReportDialog = true },
+                        onDismissBanner = {
+                            showHomeGuideBanner = false
+                            prefs.edit().putBoolean("dismissed_home_quick_guide_v1", true).apply()
+                        }
+                    )
+                }
+            }
+
             // 0. Unified Today Hub Banner (Tasks + Habits + Bills Due + Expiring Vault Docs)
             item {
                 UnifiedTodayDashboardBanner(

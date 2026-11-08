@@ -165,5 +165,10 @@ class ExampleRobolectricTest {
             meditationMinutesToday = 10
         )
         assertEquals(100, wrapScore.scorePercent)
+
+        // Verify SupportAndFeedbackUtils anti-spam, rate limiting, and Google Sheet formula sanitization
+        assertEquals("'=IMPORTXML(\"http://evil\")", com.example.utils.SupportAndFeedbackUtils.sanitizeForSheetCell("=IMPORTXML(\"http://evil\")"))
+        assertTrue(com.example.utils.SupportAndFeedbackUtils.isRepetitiveGibberish("aaaaaaaaaaaa"))
+        assertEquals("https://maulik-solanki.vercel.app", com.example.utils.SupportAndFeedbackUtils.PORTFOLIO_URL)
     }
 }

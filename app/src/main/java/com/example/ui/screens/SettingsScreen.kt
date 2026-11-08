@@ -32,7 +32,10 @@ import com.example.R
 import com.example.data.BackupValidationResult
 import com.example.ui.BackupHelper
 import com.example.ui.BiometricHelper
+import com.example.ui.components.AppQuickGuideDialog
+import com.example.ui.components.BugReportAndFeedbackDialog
 import com.example.ui.components.CategoryManagementDialog
+import com.example.ui.components.DeveloperSupportAndFeedbackSection
 import com.example.utils.DocumentVaultUtils
 import com.example.utils.EcosystemHubUtils
 import com.example.utils.FormatUtils
@@ -104,6 +107,8 @@ fun SettingsScreen(navController: NavController, viewModel: FinanceViewModel) {
     var showWeekStartMenu by remember { mutableStateOf(false) }
     var showResetDataDialog by remember { mutableStateOf(false) }
     var showYearEndCloseDialog by remember { mutableStateOf(false) }
+    var showAppQuickGuideDialog by remember { mutableStateOf(false) }
+    var showBugReportDialog by remember { mutableStateOf(false) }
 
     // Backup preview dialog state
     var pendingRestoreValidation by remember { mutableStateOf<BackupValidationResult?>(null) }
@@ -182,6 +187,25 @@ fun SettingsScreen(navController: NavController, viewModel: FinanceViewModel) {
             viewModel = viewModel,
             navController = navController,
             onDismiss = { showGlobalSearch = false }
+        )
+    }
+
+    if (showAppQuickGuideDialog) {
+        AppQuickGuideDialog(
+            onDismiss = { showAppQuickGuideDialog = false },
+            onOpenBugReport = {
+                showAppQuickGuideDialog = false
+                showBugReportDialog = true
+            }
+        )
+    }
+
+    if (showBugReportDialog) {
+        BugReportAndFeedbackDialog(
+            onDismiss = { showBugReportDialog = false },
+            onShowMessage = { msg ->
+                coroutineScope.launch { snackbarHostState.showSnackbar(msg) }
+            }
         )
     }
 
@@ -1416,6 +1440,14 @@ fun SettingsScreen(navController: NavController, viewModel: FinanceViewModel) {
                         )
                     }
                 }
+            }
+
+            // 10. Developer Info, Contact Support & Bug Report (Google Sheet Sync)
+            item {
+                DeveloperSupportAndFeedbackSection(
+                    onOpenQuickGuide = { showAppQuickGuideDialog = true },
+                    onOpenBugReport = { showBugReportDialog = true }
+                )
             }
         }
     }

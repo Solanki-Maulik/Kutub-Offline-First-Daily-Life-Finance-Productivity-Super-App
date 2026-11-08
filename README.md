@@ -1,14 +1,22 @@
 # Kutub (કુટુંબ) — Offline-First Daily Life, Finance & Productivity Super-App
 
-**Kutub (કુટુંબ)** is a fast, privacy-first, **100% offline-capable** Android application built with **Kotlin** and **Jetpack Compose (Material Design 3)**. It brings together personal finance, udhaar (debt/loan) tracking, tasks, daily timetables, habit streaks, notes, and a complete **Daily Life & Pro Toolkit**—including a **Vehicle Fuel & Mileage (`km/L`) Tracker** and a **Live Meditation Countdown & Breathing Pacer**—in a single clean app with zero subscriptions or paywalls.
+[![License: MIT](https://img.shields.io/badge/License-MIT-emerald.svg)](./LICENSE)
+[![Platform: Android](https://img.shields.io/badge/Platform-Android%207.0%2B%20(API%2024%2B)-3DDC84.svg)](https://developer.android.com)
+[![UI: Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20(Material%203)-4285F4.svg)](https://developer.android.com/jetpack/compose)
+[![Author: Maulik Solanki](https://img.shields.io/badge/Author-Maulik%20Solanki-orange.svg)](https://maulik-solanki.vercel.app)
+
+**Kutub (કુટુંબ)** is a fast, privacy-first, **100% offline-capable** Android application designed for everyday Indian household & personal utility. It brings together personal finance, Udhaar (debt/loan) tracking, tasks, daily timetables, habit streaks, notes, and a complete **Daily Life & Pro Toolkit**—including a **Vehicle Fuel & Mileage (`km/L`) Tracker** and a **Live Meditation Countdown & Breathing Pacer**—in a single clean app with zero subscriptions or paywalls.
+
+- **Created & Designed by:** [Maulik Solanki](https://maulik-solanki.vercel.app)
+- **Portfolio Website:** [https://maulik-solanki.vercel.app](https://maulik-solanki.vercel.app)
 
 ---
 
 ## 🔒 Public Repository Security & Offline-First Architecture
 
-- **Zero API Keys in Repository**: This repository contains **no `GEMINI_API_KEY`** or hardcoded credentials in source code, Gradle files, or `.env.example`. It is completely safe to publish as a **Public GitHub Repository**.
+- **Zero API Keys in Repository**: This repository contains **no `GEMINI_API_KEY`** or hardcoded credentials in source code, Gradle files, or `.env.example`. It is completely safe to publish and fork as a **Public GitHub Repository**.
 - **100% Offline-First Operation**:
-  - All financial transactions, accounts, budgets, bills, udhaar records, tasks, schedules, habits, notes, fuel logs, and meditation sessions are stored locally on your device using **Android Room (SQLite)** and **SharedPreferences**.
+  - All financial transactions, accounts, budgets, bills, Udhaar records, tasks, schedules, habits, notes, fuel logs, and meditation sessions are stored locally on the device using **Android Room (SQLite)** and **SharedPreferences**.
   - **Instant Offline Smart Data Entry**: The Smart Entry & Assistant module includes a built-in **on-device local NLP & Regex parser** (`< 5 ms` response time) that parses natural-language commands into **Expenses, Income, Transfers, Udhaar (Got/Gave), Tasks, Schedules, Habits, and Notes** even with **no internet connection**.
   - When online and configured with Firebase AI Logic (`Firebase.ai` + App Check), cloud-assisted insights and receipt scanning are optionally supported with automatic instant fallback to the on-device engine.
 
@@ -80,7 +88,7 @@ Kutub follows strict **least-privilege** privacy standards:
 
 ## 🛠️ Tech Stack & Project Structure
 
-- **Language**: 100% Kotlin
+- **Language**: Kotlin (JVM compatible)
 - **UI Framework**: Jetpack Compose + Material Design 3 (Dynamic & Custom Light/Dark Themes, Adaptive Typography)
 - **Architecture**: MVVM (`FinanceViewModel`, `StateFlow`, `collectAsStateWithLifecycle`)
 - **Local Persistence**: Room SQLite Database (`AppDatabase`, `FinanceDao`) + SharedPreferences JSON persistence (`DailyToolkitUtils`)
@@ -123,6 +131,29 @@ app/src/main/java/com/example/
 
 ---
 
+## 🛡️ In-App Quick Guide & Anti-Spam Google Sheet Bug Reporting
+
+- **Home Screen Quick Start Guide**: Includes a dismissible first-launch guide banner and a `?` help icon in the top bar explaining all core modules in plain language.
+- **Secure Bug Report & Feedback Pipeline**:
+  - Users can submit bug reports or feature feedback with **Name (Optional)**, **Email / Contact / Screen Info (Optional)**, **Category**, and **Description**.
+  - **Anti-Spam & Security Layers**:
+    1. **Rate Limiting**: Enforces a 2-minute cooldown between reports and a maximum of 5 reports/day per device.
+    2. **Duplicate Content Hashing**: Blocks repeated submissions of identical messages using SHA-256 hashing.
+    3. **Google Sheet Formula-Injection Protection**: Automatically sanitizes leading `=`, `+`, `-`, `@` characters (`sanitizeForSheetCell`) and strips HTML tags so malicious formulas cannot be injected into the developer's Google Sheet.
+    4. **Offline Queue & Direct Email Fallback**: Saves reports locally when offline and connects to Google Sheets via a zero-key Google Apps Script Web App (`doPost`) or direct email.
+
+---
+
+## 👤 Author
+
+**Maulik Solanki**
+- 🌐 **Portfolio:** [https://maulik-solanki.vercel.app](https://maulik-solanki.vercel.app)
+- ✉️ **Contact & Support:** `mrmaulik1112@gmail.com`
+
+---
+
 ## 📄 License
 
-This project is open-source and available for personal and educational use.
+This project is licensed under the **MIT License** — see the [LICENSE](./LICENSE) file for details.
+
+Copyright (c) 2026 **Maulik Solanki** ([https://maulik-solanki.vercel.app](https://maulik-solanki.vercel.app))
